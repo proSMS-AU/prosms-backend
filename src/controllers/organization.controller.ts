@@ -1,0 +1,44 @@
+import { OrganizationServices } from "../services/organization.service";
+import { SendSuccessResponse } from "../utils";
+import { Request, Response } from "express";
+
+const getAllOrganizationsHandler = async (req: Request, res: Response) => {
+  const { organizations, total, page, limit, totalPages } = await OrganizationServices.getAllOrganizations(
+    req.query as Record<string, string>
+  );
+  SendSuccessResponse.success({
+    res,
+    message: "All organizations retrieved successfully!",
+    data: organizations,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages
+    }
+  });
+};
+
+const getOrganizationHandler = async (req: Request, res: Response) => {
+  const organization = await OrganizationServices.getLoggedInOrganization(req.user?.organizationId as string);
+  SendSuccessResponse.success({
+    res,
+    message: "Logged in organization details retrieved successfully!",
+    data: organization
+  });
+};
+
+const getOrganizationByIdHandler = async (req: Request, res: Response) => {
+  const organization = await OrganizationServices.getOrganizationById(req.params.id);
+  SendSuccessResponse.success({
+    res,
+    message: "Organization details retrieved successfully!",
+    data: organization
+  });
+};
+
+export const organizationControllers = {
+  getAllOrganizationsHandler,
+  getOrganizationHandler,
+  getOrganizationByIdHandler
+};

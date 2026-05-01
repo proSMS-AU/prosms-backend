@@ -1,0 +1,39 @@
+// {
+//   "editor.formatOnPaste": true,
+//   "editor.formatOnSave": true,
+//   "editor.codeActionsOnSave": {
+//     "source.fixAll.eslint": "always",
+//     "source.fixAll.format": "always"
+//   },
+//   "editor.rulers": [80],
+//   "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+//   "files.trimTrailingWhitespace": true,
+//   "javascript.preferences.quoteStyle": "double",
+//   "editor.defaultFormatter": "esbenp.prettier-vscode",
+//   "cSpell.words": ["camelcase", "FIRECRAWL", "OPENAI", "organisation", "plusplus"],
+//   "search.useIgnoreFiles": true
+// }
+
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.formatOnPaste": true,
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "prettier.requireConfig": true,
+  "prettier.useEditorConfig": false,
+  "cSpell.words": ["ASQA", "Avetmiss", "docxtemplater"]
+}
