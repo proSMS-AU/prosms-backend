@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
 
-    container_name: prosms-backend
+    container_name: prosms-api
 
     restart: unless-stopped
 
