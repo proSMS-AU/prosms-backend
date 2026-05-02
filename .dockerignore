@@ -14,8 +14,8 @@ build
 .gitignore
 .github
 
-# Environment files (commented out to allow .env in container)
-# .env
+# Environment files — injected at runtime via docker-compose env_file, not baked in
+.env
 .env.local
 .env.development.local
 .env.test.local

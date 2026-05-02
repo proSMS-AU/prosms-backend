@@ -22,7 +22,8 @@ export default {
     r2SecretAccessKey: "",
     r2Endpoint: "",
     r2Bucket: "",
-    r2PublicBaseURL: ""
+    r2PublicBaseURL: "",
+    systemABN: ""
   },
   db: {
     uri: ""
@@ -31,5 +32,8 @@ export default {
     apiKey: "",
     fromEmail: "",
     fromName: ""
+  },
+  usi: {
+    apiBaseURL: ""
   }
 };

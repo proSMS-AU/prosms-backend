@@ -3,60 +3,41 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+
     container_name: prosms-backend
+
     restart: unless-stopped
+
     ports:
-      - "${PORT:-8080}:8080"
-    environment:
-      - PROJECT_NAME=${PROJECT_NAME}
-      - ENVIRONMENT=${ENVIRONMENT}
-      - PORT=${PORT}
-      - SERVER_BASE_URL=${SERVER_BASE_URL}
-      - CLIENT_BASE_URL=${CLIENT_BASE_URL}
+      - "8080:8080"
 
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+    env_file:
+      - .env
 
-      - ACCESS_TOKEN_SECRET=${ACCESS_TOKEN_SECRET}
-      - ACCESS_TOKEN_EXPIRY=${ACCESS_TOKEN_EXPIRY}
-      - REFRESH_TOKEN_SECRET=${REFRESH_TOKEN_SECRET}
-      - REFRESH_TOKEN_EXPIRY=${REFRESH_TOKEN_EXPIRY}
-      - SESSION_SECRET=${SESSION_SECRET}
-      - ONBOARD_TOKEN_SECRET=${ONBOARD_TOKEN_SECRET}
-      - ONBOARD_TOKEN_EXPIRY=${ONBOARD_TOKEN_EXPIRY}
-
-      - MONGODB_URI=${MONGODB_URI}
-
-      - SMTP_HOST=${SMTP_HOST}
-      - SMTP_PORT=${SMTP_PORT}
-      - SMTP_FROM=${SMTP_FROM}
-      - SMTP_PASS=${SMTP_PASS}
-      - SMTP_USER=${SMTP_USER}
-
-      - R2_TOKEN=${R2_TOKEN}
-      - R2_ACCESS_KEY_ID=${R2_ACCESS_KEY_ID}
-      - R2_SECRET_ACCESS_KEY=${R2_SECRET_ACCESS_KEY}
-      - R2_ENDPOINT=${R2_ENDPOINT}
-      - R2_BUCKET=${R2_BUCKET}
-      - R2_PUBLIC_BASE_URL=${R2_PUBLIC_BASE_URL}
     volumes:
       - ./logs:/app/logs
       - ./src/temp:/app/src/temp
       - ./src/uploads:/app/src/uploads
+
     networks:
       - prosms-network
+
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "require('http').get('http://localhost:8080/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})",
-        ]
+      test: [ "CMD-SHELL", "wget --spider -q http://localhost:8080/health || exit 1" ]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
-      start_period: 40s
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # small but useful (prevents zombie processes)
+    init: true
 
 networks:
   prosms-network:
-    driver: bridge
+    external: true
