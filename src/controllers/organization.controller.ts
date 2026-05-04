@@ -37,8 +37,18 @@ const getOrganizationByIdHandler = async (req: Request, res: Response) => {
   });
 };
 
+const getOrganizationStatsHandler = async (req: Request, res: Response) => {
+  const stats = await OrganizationServices.getOrganizationStats();
+  SendSuccessResponse.success({
+    res,
+    message: "Organization stats retrieved successfully!",
+    data: stats
+  });
+};
+
 export const organizationControllers = {
   getAllOrganizationsHandler,
   getOrganizationHandler,
-  getOrganizationByIdHandler
+  getOrganizationByIdHandler,
+  getOrganizationStatsHandler
 };

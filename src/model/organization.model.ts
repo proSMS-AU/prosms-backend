@@ -94,6 +94,13 @@ export class Organization {
   @Prop({ type: () => OrganizationAddress, _id: false })
   address: OrganizationAddress;
 
+  @Prop({
+    type: String,
+    enum: ["active", "inactive", "pending", "reported"],
+    default: "active"
+  })
+  status: "active" | "inactive" | "pending" | "reported";
+
   @Prop({ type: () => USIConfiguration, _id: false })
   usiConfig?: USIConfiguration;
 }

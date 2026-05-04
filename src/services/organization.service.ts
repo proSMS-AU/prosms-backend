@@ -42,8 +42,21 @@ const getOrganizationById = async (id: string) => {
   return organization;
 };
 
+const getOrganizationStats = async () => {
+  const [total, active, inactive, pending, reported] = await Promise.all([
+    OrganizationModel.countDocuments(),
+    OrganizationModel.countDocuments({ status: "active" }),
+    OrganizationModel.countDocuments({ status: "inactive" }),
+    OrganizationModel.countDocuments({ status: "pending" }),
+    OrganizationModel.countDocuments({ status: "reported" })
+  ]);
+
+  return { total, active, inactive, pending, reported };
+};
+
 export const OrganizationServices = {
   getAllOrganizations,
   getLoggedInOrganization,
-  getOrganizationById
+  getOrganizationById,
+  getOrganizationStats
 };
