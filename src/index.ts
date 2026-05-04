@@ -5,6 +5,7 @@ import config from "config";
 import app from "./app";
 import { logger, dbConnection } from "./utils";
 import { initializeAuth } from "./utils/auth";
+import { seedSuperAdmin } from "./utils/seedSuperAdmin";
 
 const port: number = config.get("server.port");
 
@@ -12,6 +13,7 @@ const start = async () => {
   try {
     await dbConnection();
     initializeAuth();
+    await seedSuperAdmin();
 
     app.listen(port, async () => {
       logger.info(`Server is up & running on http://localhost:${port}`);
