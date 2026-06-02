@@ -71,8 +71,11 @@ export const seedSuperAdmin = async (): Promise<void> => {
     await db.collection("auth").updateOne(
       { email: SUPER_ADMIN_EMAIL },
       {
+        // NOTE: do NOT set _id here — the `auth` collection is a Mongoose
+        // (ObjectId _id) model, so let Mongo generate an ObjectId. Forcing a
+        // string _id makes every AuthModel.findById(req.user._id) throw a
+        // CastError (breaks 2FA setup/devices and other authed endpoints).
         $setOnInsert: {
-          _id: generateId() as unknown as never,
           name: SUPER_ADMIN_NAME,
           email: SUPER_ADMIN_EMAIL,
           password: argonPassword,
