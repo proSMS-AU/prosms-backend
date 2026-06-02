@@ -123,10 +123,14 @@ const uploadTemplateHandler = async (req: Request, res: Response) => {
     templateUrl: uploadResult.publicUrl!,
     templateKey: uploadResult.key!,
     description: req.body.description || "",
-    organizationId: req.user?.organizationId as string,
     placeholders: TemplateServices.getDefaultPlaceholders(templateType),
     isMultiPageTemplate: templateType === TemplateType.CERTIFICATE_DOUBLE
   };
+
+  // Admin uploads are scoped to their organization; SA uploads are global
+  if (req.user?.organizationId) {
+    templateData.organizationId = req.user.organizationId;
+  }
 
   // Handle second page if CERTIFICATE_DOUBLE
   if (templatePage2File) {

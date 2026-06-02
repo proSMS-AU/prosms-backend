@@ -37,7 +37,7 @@ const sendOnboardTokenToUser = async (data: SendOnboardUrlInput) => {
 
   const onboardUrl = `${config.get("server.clientUrl")}/organization/onboarding?token=${token}`;
 
-  // This will now use SendGrid instead of SMTP!
+  // Sends via Resend.
   sendEmail({
     to: data.email,
     subject: "Onboard Verification",

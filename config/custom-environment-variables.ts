@@ -23,10 +23,10 @@ export default {
   db: {
     uri: "MONGODB_URI"
   },
-  sendgrid: {
-    apiKey: "SENDGRID_API_KEY",
-    fromEmail: "SENDGRID_FROM_EMAIL",
-    fromName: "SENDGRID_FROM_NAME"
+  resend: {
+    apiKey: "RESEND_API_KEY",
+    fromEmail: "RESEND_FROM_EMAIL",
+    fromName: "RESEND_FROM_NAME"
   },
   usi: {
     apiBaseURL: "USI_API_BASE_URL"

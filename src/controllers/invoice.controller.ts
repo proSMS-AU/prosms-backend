@@ -110,9 +110,27 @@ const deleteInvoiceByIdHandler = async (req: Request, res: Response) => {
   });
 };
 
+const bulkCreateInvoicesHandler = async (req: Request, res: Response) => {
+  const { classId, studentIds, templateId } = req.body as { classId: string; studentIds: string[]; templateId: string };
+  const results = await InvoiceServices.bulkCreateInvoices(
+    classId,
+    studentIds,
+    templateId,
+    req.user!.organizationId as string,
+    String(req.user!._id ?? "")
+  );
+  const successCount = results.filter((r) => r.success).length;
+  SendSuccessResponse.created({
+    res,
+    message: `Bulk invoice: ${successCount}/${results.length} created`,
+    data: results
+  });
+};
+
 export const InvoiceController = {
   generateManualInvoiceHandler,
   generateAutoInvoiceHandler,
+  bulkCreateInvoicesHandler,
   getManualInvoicesHandler,
   getAutoInvoicesHandler,
   getInvoiceByIdHandler,

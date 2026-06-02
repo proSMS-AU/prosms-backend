@@ -237,12 +237,25 @@ const getClassPopularityAndCompletion = async (organizationId: string): Promise<
         enrollmentCount: { $gt: 0 }
       }
     },
+    {
+      $lookup: {
+        from: "qualifications",
+        localField: "qualificationId",
+        foreignField: "_id",
+        as: "qualificationDoc"
+      }
+    },
+    {
+      $addFields: {
+        qualificationTitle: { $first: "$qualificationDoc.title" }
+      }
+    },
     { $unwind: "$enrollments" },
     {
       $group: {
         _id: "$_id",
         classTitle: { $first: "$classDetails.classTitle" },
-        qualificationTitle: { $first: "$qualification.title" },
+        qualificationTitle: { $first: "$qualificationTitle" },
         completed: {
           $sum: {
             $cond: [{ $ne: ["$enrollments.completionDate", null] }, 1, 0]

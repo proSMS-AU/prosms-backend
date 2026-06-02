@@ -15,6 +15,7 @@ import { IUpdateCourseEnrollAndCompleteDate } from "../schemas/class.schema";
 import { EnrollmentT, EnrollmentWithNotifyT } from "../schemas/enrollment.schema";
 import { AppError } from "../utils/appError";
 import { sendEmail } from "../utils/sendEmail";
+import { logActivity } from "../utils/activityLogger";
 
 const addEnrollment = async (enrollmentData: EnrollmentT) => {
   const classData = await ClassModel.findById(enrollmentData.classId);
@@ -23,7 +24,7 @@ const addEnrollment = async (enrollmentData: EnrollmentT) => {
   }
 
   const studentData = await StudentModel.findById(enrollmentData.studentId);
-  if (!studentData) {
+  if (!studentData || studentData.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Student not found to enroll in class!");
   }
 
@@ -85,11 +86,25 @@ const addEnrollment = async (enrollmentData: EnrollmentT) => {
       USI: studentData.participantsIdentifiers.USI
     },
     unitsOfCompetency: unitsOfCompetency,
-    enrollmentDate: new Date()
+    enrollmentDate: new Date(),
+    studyReason: enrollmentData.studyReason ?? null,
+    trainingContractId: (enrollmentData as any).trainingContractId ?? null,
+    apprenticeshipClientId: (enrollmentData as any).apprenticeshipClientId ?? null,
+    commencingProgramOverride: (enrollmentData as any).commencingProgramOverride ?? "",
+    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? ""
   };
 
   classData.enrollments.push(prepareData);
   await classData.save();
+
+  logActivity({
+    organizationId: String(classData.organizationId),
+    entityType: "enrollment",
+    entityId: String(classData._id),
+    entityLabel: `${studentData.personalInfo.givenName} ${studentData.personalInfo.surname ?? ""}`.trim(),
+    action: "enroll",
+    description: `Enrolled in class "${classData.classDetails.classTitle}"`,
+  });
 
   return classData;
 };
@@ -101,7 +116,7 @@ const addEnrollmentWithNotify = async (enrollmentData: EnrollmentWithNotifyT) =>
   }
 
   const studentData = await StudentModel.findById(enrollmentData.studentId);
-  if (!studentData) {
+  if (!studentData || studentData.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Student not found!");
   }
 
@@ -164,7 +179,12 @@ const addEnrollmentWithNotify = async (enrollmentData: EnrollmentWithNotifyT) =>
       USI: studentData.participantsIdentifiers.USI
     },
     unitsOfCompetency: unitsOfCompetency,
-    enrollmentDate: new Date()
+    enrollmentDate: new Date(),
+    studyReason: (enrollmentData as any).studyReason ?? null,
+    trainingContractId: (enrollmentData as any).trainingContractId ?? null,
+    apprenticeshipClientId: (enrollmentData as any).apprenticeshipClientId ?? null,
+    commencingProgramOverride: (enrollmentData as any).commencingProgramOverride ?? "",
+    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? ""
   };
 
   classData.enrollments.push(prepareData);
@@ -658,6 +678,124 @@ const updateCourseEnrollAndCompleteDate = async (data: IUpdateCourseEnrollAndCom
   return cls.enrollments;
 };
 
+// E-01 — All classes a student is enrolled in across the org (R-01 safe: no isDeleted filter needed here)
+const getStudentEnrollments = async (studentId: string, organizationId: string) => {
+  const classes = await ClassModel.find({
+    organizationId,
+    "enrollments.studentInfo.id": studentId
+  })
+    .populate("qualificationId")
+    .lean();
+
+  return classes.map((cls: any) => ({
+    classId: cls._id,
+    classTitle: cls.classDetails?.classTitle,
+    startDate: cls.classDetails?.startDate,
+    endDate: cls.classDetails?.endDate,
+    qualification: cls.qualificationId,
+    enrollment: cls.enrollments?.find((e: any) => e.studentInfo?.id === studentId)
+  }));
+};
+
+// E-03 — Bulk enrol multiple students into one class
+const bulkEnrollStudents = async (
+  classId: string,
+  studentIds: string[],
+  unitIds: string[]
+): Promise<{ success: string[]; failed: { studentId: string; reason: string }[] }> => {
+  const classData = await ClassModel.findById(classId);
+  if (!classData) throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Class not found!");
+
+  const allUnitsOfClass = [...classData.unitsInfo.selectedUnits.core, ...classData.unitsInfo.selectedUnits.elective];
+
+  const results: { success: string[]; failed: { studentId: string; reason: string }[] } = {
+    success: [],
+    failed: []
+  };
+
+  for (const studentId of studentIds) {
+    const studentData = await StudentModel.findById(studentId);
+
+    if (!studentData || studentData.isDeleted) {
+      results.failed.push({ studentId, reason: "Student not found" });
+      continue;
+    }
+
+    if (classData.enrollments.some((e: any) => e.studentInfo?.id === studentId)) {
+      results.failed.push({ studentId, reason: "Already enrolled in this class" });
+      continue;
+    }
+
+    const unitsOfCompetency = unitIds
+      .map((unitId) => {
+        const unit = allUnitsOfClass.find((u: any) => u.id === unitId);
+        if (!unit) return null;
+        return {
+          id: (unit as any).id,
+          code: (unit as any).code,
+          hour: (unit as any).hour,
+          title: (unit as any).title,
+          statusOfCompletion: UNIT_COMPETENCY_MAP.NYS.code,
+          classStartDate: classData.classDetails.startDate,
+          classEndDate: classData.classDetails.endDate,
+          unitStartDate: new Date(),
+          unitEndDate: classData.classDetails.endDate,
+          unitEnrollmentDate: new Date()
+        };
+      })
+      .filter(Boolean);
+
+    classData.enrollments.push({
+      class: { id: classData._id, title: classData.classDetails.classTitle },
+      studentInfo: {
+        id: studentData._id,
+        name: `${studentData.personalInfo.givenName} ${studentData.personalInfo.surname ?? ""}`.trim(),
+        email: studentData.contactDetails.email,
+        phone: studentData.contactDetails.personalPhone,
+        USI: studentData.participantsIdentifiers.USI
+      },
+      unitsOfCompetency,
+      enrollmentDate: new Date()
+    } as any);
+
+    results.success.push(studentId);
+  }
+
+  await classData.save();
+  return results;
+};
+
+const bulkUpdateDates = async (
+  classId: string,
+  studentIds: string[],
+  dates: {
+    enrollmentDate?: string;
+    unitStartDate?: string;
+    unitEndDate?: string;
+  }
+) => {
+  const classData = await ClassModel.findById(classId);
+  if (!classData) throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Class not found");
+
+  let updatedCount = 0;
+  for (const enrollment of classData.enrollments) {
+    if (!studentIds.includes(enrollment.studentInfo.id)) continue;
+
+    if (dates.enrollmentDate) enrollment.enrollmentDate = new Date(dates.enrollmentDate);
+
+    if (dates.unitStartDate || dates.unitEndDate) {
+      for (const unit of enrollment.unitsOfCompetency) {
+        if (dates.unitStartDate) (unit as any).unitStartDate = new Date(dates.unitStartDate);
+        if (dates.unitEndDate) (unit as any).unitEndDate = new Date(dates.unitEndDate);
+      }
+    }
+    updatedCount++;
+  }
+
+  await classData.save();
+  return { updatedCount };
+};
+
 export const EnrollmentServices = {
   addEnrollment,
   addEnrollmentWithNotify,
@@ -668,5 +806,8 @@ export const EnrollmentServices = {
   enrolledUnitsBulkUpdate,
   enrolledUnitUpdate,
   unitsStatusBulkUpdate,
-  updateCourseEnrollAndCompleteDate
+  updateCourseEnrollAndCompleteDate,
+  getStudentEnrollments,
+  bulkEnrollStudents,
+  bulkUpdateDates
 };

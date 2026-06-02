@@ -17,6 +17,7 @@ router.post(
   asyncWrapper(InvoiceController.generateManualInvoiceHandler)
 );
 
+router.post("/bulk-create", asyncWrapper(InvoiceController.bulkCreateInvoicesHandler));
 router.get("/auto", asyncWrapper(InvoiceController.getAutoInvoicesHandler));
 router.get("/manual", asyncWrapper(InvoiceController.getManualInvoicesHandler));
 router.get("/created-by/sa", asyncWrapper(InvoiceController.getSAInvoicesHandler));

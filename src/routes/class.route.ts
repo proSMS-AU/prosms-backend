@@ -32,4 +32,7 @@ router.patch("/:id", asyncWrapper(ClassControllers.updateClassHandler));
 
 router.delete("/:id", asyncWrapper(ClassControllers.deleteClassHandler));
 
+// D.3 — Bulk enrol multiple students into a class
+router.post("/:id/enrollments/bulk", asyncWrapper(ClassControllers.bulkEnrollStudentsHandler));
+
 export default router;

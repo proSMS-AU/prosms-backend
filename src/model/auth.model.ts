@@ -1,5 +1,30 @@
 import { getModelForClass, ModelOptions, Prop } from "@typegoose/typegoose";
 
+class TotpDevice {
+  @Prop({ required: true, type: String })
+  encryptedSecret: string;
+
+  @Prop({ required: true, type: String })
+  label: string;
+
+  @Prop({ required: true, type: Date, default: Date.now })
+  addedAt: Date;
+}
+
+class TwoFactorAuth {
+  @Prop({ type: Boolean, default: false })
+  twoFaEnabled: boolean;
+
+  @Prop({ type: Boolean, default: false })
+  enabled: boolean;
+
+  @Prop({ type: () => [TotpDevice], default: [], _id: false })
+  devices: TotpDevice[];
+
+  @Prop({ type: Boolean, default: false })
+  emailOtpEnabled: boolean;
+}
+
 @ModelOptions({
   schemaOptions: {
     collection: "auth",
@@ -34,5 +59,8 @@ export class Auth {
     type: String
   })
   organizationId: string;
+
+  @Prop({ type: () => TwoFactorAuth, _id: false, default: () => ({ enabled: false, devices: [], emailOtpEnabled: false }) })
+  twoFactorAuth?: TwoFactorAuth;
 }
 export const AuthModel = getModelForClass(Auth);

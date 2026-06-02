@@ -1,4 +1,4 @@
-import { Prop, ModelOptions, getModelForClass, Index } from "@typegoose/typegoose";
+import { Prop, ModelOptions, getModelForClass, Index, Severity } from "@typegoose/typegoose";
 import { Organization } from "./organization.model";
 import mongoose from "mongoose";
 
@@ -8,7 +8,8 @@ import mongoose from "mongoose";
     collection: "asqa_reports",
     timestamps: true,
     versionKey: false
-  }
+  },
+  options: { allowMixed: Severity.ALLOW }
 })
 export class ASQAReport {
   @Prop({ required: true })
@@ -43,5 +44,9 @@ export class ASQAReport {
 
   @Prop({ required: true, default: false })
   isImported: boolean;
+
+  // R-02: Light snapshot of class IDs used so the report can be re-identified even after data changes
+  @Prop({ type: Object })
+  snapshotData?: Record<string, unknown>;
 }
 export const ASQAReportModel = getModelForClass(ASQAReport);

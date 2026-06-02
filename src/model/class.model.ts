@@ -135,29 +135,34 @@ class Enrollments {
   class: EnrolledClass;
 
   @Prop({
+    type: Date,
     default: null
   })
   certificateIssuedDate?: Date | null;
 
   @Prop({
     // ref: () => Certificate,
+    type: Types.ObjectId,
     default: null
   })
   certificateId?: Types.ObjectId | null;
 
   @Prop({
+    type: String,
     required: false,
     default: null
   })
   certificateShortId: string | null;
 
   @Prop({
+    type: String,
     required: false,
     default: null
   })
   certificateKey: string | null;
 
   @Prop({
+    type: Date,
     required: false,
     default: null
   })
@@ -172,6 +177,30 @@ class Enrollments {
 
   @Prop()
   studyReason?: string;
+
+  // Outcome per enrolment — replaces hardcoded "60" in NAT00120 pos 72 (R-20)
+  @Prop({ type: String })
+  outcomeIdentifierNational?: string;
+
+  // NAT00130 pos 39 — Y when certificate issued, N otherwise (R-21)
+  @Prop({ type: String, default: "N" })
+  issuedFlag?: string;
+
+  // Apprenticeship fields — NAT00120 pos 77 (trainingContractId) + pos 87 (clientId) (R-19)
+  @Prop({ type: String })
+  trainingContractId?: string;
+
+  @Prop({ type: String })
+  apprenticeshipClientId?: string;
+
+  // NAT00120 pos 76 override — "3" Commencing / "4" Continuing / "8" UoC-SOA only
+  // When blank, auto-derived (first class for this qual = "3", subsequent = "4")
+  @Prop({ type: String, enum: ["3", "4", "8", ""], default: "" })
+  commencingProgramOverride?: string;
+
+  // NAT00120 pos 100–109 — Required when funding code is 13 or 15
+  @Prop({ type: String, default: "" })
+  specificFundingIdentifier?: string;
 }
 
 class ClassDetails {
@@ -202,7 +231,8 @@ class ClassDetails {
   endDate: Date;
 
   @Prop({
-    required: true
+    required: true,
+    type: () => [String]
   })
   closeDays: string[];
 
@@ -239,6 +269,10 @@ class ClassDetails {
     default: false
   })
   vetInSchool: boolean;
+
+  // R-03: ASQA Table A = FULL_QUAL classes, Table B = SOA (individual units) classes
+  @Prop({ type: String, enum: ["FULL_QUAL", "SOA"] })
+  programType?: "FULL_QUAL" | "SOA";
 }
 
 class ReportingDetails {
@@ -271,15 +305,18 @@ class ReportingDetails {
   })
   doNotReport: boolean;
 
+  // Per-class ASQA opt-out; existing doNotReport field covers AVETMISS (E-05)
+  @Prop({ type: Boolean, default: false })
+  doNotReportAsqa?: boolean;
+
   @Prop()
   comment?: string;
 }
 
 class FundDetails {
-  @Prop({
-    required: true
-  })
-  fundingSourceNational: string;
+  // Student-level fundingSourceNational is source of truth (R-06); this is the class-level fallback only
+  @Prop()
+  fundingSourceNational?: string;
   @Prop({
     required: true
   })
@@ -356,5 +393,9 @@ export class classModel {
     _id: false
   })
   enrollments: Enrollments[];
+
+  // Delivery location reference for NAT00020 cross-check (R-15)
+  @Prop({ type: mongoose.Types.ObjectId })
+  deliveryLocationId?: mongoose.Types.ObjectId;
 }
 export const ClassModel = getModelForClass(classModel);

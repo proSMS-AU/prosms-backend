@@ -71,11 +71,14 @@ class Address {
   })
   unit?: string;
 
-  @Prop({
-    required: true,
-    type: String
-  })
-  street: string;
+  @Prop({ required: false, type: String })
+  street?: string;
+
+  @Prop({ required: false, type: String })
+  streetNumber?: string;
+
+  @Prop({ required: false, type: String })
+  streetName?: string;
 
   @Prop({
     required: false,

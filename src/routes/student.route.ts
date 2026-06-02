@@ -16,6 +16,10 @@ router.get("/filter-options/states", asyncWrapper(StudentController.getUniqueSta
 
 router.get("/filter-options/countries", asyncWrapper(StudentController.getUniqueCountriesHandler));
 
+// C.12 — Deleted students audit
+router.get("/deleted", asyncWrapper(StudentController.getDeletedStudentsHandler));
+router.post("/:id/restore", asyncWrapper(StudentController.restoreStudentHandler));
+
 router.post(
   "/",
   // validateResource(StudentRequestSchema),
@@ -25,6 +29,9 @@ router.post(
 router.get("/", asyncWrapper(StudentController.getAllStudentsHandler));
 
 router.get("/:id", asyncWrapper(StudentController.getStudentByIdHandler));
+
+// E-01 — All enrollments for a student (must come before generic /:id patch/delete)
+router.get("/:id/enrollments", asyncWrapper(StudentController.getStudentEnrollmentsHandler));
 
 router.patch(
   "/:id",

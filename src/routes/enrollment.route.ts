@@ -32,7 +32,11 @@ router.patch(
   asyncWrapper(EnrollmentController.enrolledUnitsBulkUpdateHandler)
 );
 
+// E-03 — Bulk enrol multiple students into one class
+router.post("/:id/bulk", asyncWrapper(EnrollmentController.bulkEnrollStudentsHandler));
+
 router.patch("/bulk-update", asyncWrapper(EnrollmentController.unitsStatusBulkUpdateHandler));
+router.patch("/bulk-update-dates", asyncWrapper(EnrollmentController.bulkUpdateDatesHandler));
 router.patch(
   "/update-course-enroll-and-complete-date",
   asyncWrapper(EnrollmentController.updateCourseEnrollAndCompleteDateHandler)

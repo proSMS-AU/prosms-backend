@@ -54,9 +54,18 @@ const getOrganizationStats = async () => {
   return { total, active, inactive, pending, reported };
 };
 
+const updateOrganization = async (id: string, data: Record<string, unknown>) => {
+  const organization = await OrganizationModel.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
+  if (!organization) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
+  }
+  return organization;
+};
+
 export const OrganizationServices = {
   getAllOrganizations,
   getLoggedInOrganization,
   getOrganizationById,
-  getOrganizationStats
+  getOrganizationStats,
+  updateOrganization
 };

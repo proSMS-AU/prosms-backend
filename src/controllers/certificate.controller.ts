@@ -84,6 +84,19 @@ const viewCertificateHandler = async (req: Request, res: Response) => {
   await streamFromR2(cert.certificateKey, res, Boolean(req.query.download));
 };
 
+// F-02: Bulk certificate generation — same logic as generateCertificatesHandler but without the 5-student cap
+const bulkGenerateCertificatesHandler = async (req: Request, res: Response) => {
+  const result = await CertificateServices.generateCertificates(req.body, req.user?.organizationId as string);
+
+  SendSuccessResponse.success({
+    res,
+    message: result.summary.allSuccessful
+      ? "All certificates generated successfully!"
+      : "Bulk certificate generation completed with some failures",
+    data: result
+  });
+};
+
 const deleteCertificate = async (req: Request, res: Response) => {
   await CertificateServices.deleteCertificate(req.params.id);
   SendSuccessResponse.deleted({
@@ -93,8 +106,26 @@ const deleteCertificate = async (req: Request, res: Response) => {
   });
 };
 
+const generateCertificatesForStudentHandler = async (req: Request, res: Response) => {
+  const { studentId, classIds, templateId } = req.body as { studentId: string; classIds: string[]; templateId: string };
+  const results = await CertificateServices.generateCertificatesForStudent(
+    studentId,
+    classIds,
+    templateId,
+    req.user!.organizationId as string
+  );
+  const successCount = results.filter((r) => r.success).length;
+  SendSuccessResponse.created({
+    res,
+    message: `Generated ${successCount}/${results.length} certificate(s) for student`,
+    data: results
+  });
+};
+
 export const CertificateController = {
   generateCertificatesHandler,
+  bulkGenerateCertificatesHandler,
+  generateCertificatesForStudentHandler,
   getCertificatesByClassHandler,
   verifyCertificatedHandler,
   sendCertificateToStudentEmailHandler,

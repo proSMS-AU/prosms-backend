@@ -26,6 +26,21 @@ export const GenerateCertificateRequestSchema = object({
 });
 export type GenerateCertificateT = z.infer<typeof GenerateCertificateRequestSchema>["body"];
 
+// F-02: Bulk variant — no student count cap (schema-level only; service handles sequentially)
+export const BulkGenerateCertificateSchema = object({
+  body: object({
+    classId: string().min(1, "Class ID is required"),
+    templateId: string().min(1, "Template ID is required"),
+    students: array(
+      object({
+        id: string().min(1, "Student ID is required"),
+        generatingDate: string().optional()
+      })
+    ).min(1, "At least one student is required")
+  })
+});
+export type BulkGenerateCertificateT = z.infer<typeof BulkGenerateCertificateSchema>["body"];
+
 export const certificateSendSchema = object({
   body: object({
     certificateId: string().min(1, "CertificateId is required"),

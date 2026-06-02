@@ -22,7 +22,13 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky"
+    "prepare": "husky",
+    "migrate:dry": "ts-node src/utils/migrations/001-fund-source-slug-to-code.ts",
+    "migrate:commit": "ts-node src/utils/migrations/001-fund-source-slug-to-code.ts --commit",
+    "migrate:002:dry": "ts-node src/utils/migrations/002-funding-source-class-to-student.ts",
+    "migrate:002:commit": "ts-node src/utils/migrations/002-funding-source-class-to-student.ts --commit",
+    "migrate:003:dry": "ts-node src/utils/migrations/003-osca-student-to-qualification.ts",
+    "migrate:003:commit": "ts-node src/utils/migrations/003-osca-student-to-qualification.ts --commit"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
@@ -64,7 +70,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.922.0",
-    "@sendgrid/mail": "^8.1.6",
     "@typegoose/typegoose": "^12.19.0",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
@@ -92,6 +97,8 @@
     "pdf-lib": "^1.17.1",
     "pizzip": "^3.2.0",
     "qrcode": "^1.5.4",
+    "resend": "^6.12.4",
+    "sqids": "^0.3.0",
     "uuid": "^13.0.0",
     "winston": "^3.17.0",
     "zod": "^4.1.11"

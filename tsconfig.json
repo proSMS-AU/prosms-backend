@@ -10,7 +10,6 @@
     "strict": true,
     "skipLibCheck": true,
     "noImplicitAny": true,
-    "moduleResolution": "Node",
     "sourceMap": true,
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { StudentServices } from "../services/student.service";
+import { EnrollmentServices } from "../services/enrollment.service";
 import { SendSuccessResponse } from "../utils";
 import { AppError } from "../utils/appError";
 import { BAD_REQUEST, httpStatus } from "../constants";
@@ -54,7 +55,7 @@ const updateStudentHandler = async (req: Request, res: Response) => {
 };
 
 const deleteStudentHandler = async (req: Request, res: Response) => {
-  await StudentServices.deleteStudent(req.params.id);
+  await StudentServices.deleteStudent(req.params.id, req.user?._id);
   SendSuccessResponse.deleted({
     res,
     message: "Student deleted successfully",
@@ -92,13 +93,41 @@ const getUniqueCountriesHandler = async (req: Request, res: Response) => {
   });
 };
 
+// E-01 — All classes this student is enrolled in
+const getStudentEnrollmentsHandler = async (req: Request, res: Response) => {
+  const enrollments = await EnrollmentServices.getStudentEnrollments(
+    req.params.id,
+    req.user?.organizationId as string
+  );
+  SendSuccessResponse.success({
+    res,
+    message: "Student enrollments retrieved successfully",
+    data: enrollments
+  });
+};
+
+const getDeletedStudentsHandler = async (req: Request, res: Response) => {
+  const organizationId = req.user?.organizationId as string;
+  const data = await StudentServices.getDeletedStudents(organizationId);
+  SendSuccessResponse.success({ res, message: "Deleted students retrieved", data });
+};
+
+const restoreStudentHandler = async (req: Request, res: Response) => {
+  const organizationId = req.user?.organizationId as string;
+  const data = await StudentServices.restoreStudent(req.params.id, organizationId);
+  SendSuccessResponse.success({ res, message: "Student restored", data });
+};
+
 export const StudentController = {
   addNewStudentHandler,
   getAllStudentsHandler,
   getStudentByIdHandler,
   updateStudentHandler,
   deleteStudentHandler,
+  getDeletedStudentsHandler,
+  restoreStudentHandler,
   getUniqueLocationsHandler,
   getUniqueStatesHandler,
-  getUniqueCountriesHandler
+  getUniqueCountriesHandler,
+  getStudentEnrollmentsHandler
 };

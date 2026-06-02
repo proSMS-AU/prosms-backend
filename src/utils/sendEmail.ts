@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import sgMail, { MailDataRequired } from "@sendgrid/mail";
+import { Resend } from "resend";
 import config from "config";
 import path from "path";
 import ejs from "ejs";
@@ -16,11 +16,13 @@ interface ISendEmailOptions {
     type: string;
     disposition?: "attachment" | "inline";
   }[];
+  // Kept for backward compatibility with existing callers (SendGrid metadata).
+  // Resend has no direct equivalent, so these are accepted but not forwarded.
   categories?: string[];
   customArgs?: Record<string, string>;
 }
 
-interface ISendGridConfig {
+interface IResendConfig {
   apiKey: string;
   fromEmail: string;
   fromName: string;
@@ -28,87 +30,67 @@ interface ISendGridConfig {
 
 class EmailService {
   private isInitialized = false;
+  private client: Resend | null = null;
 
   constructor() {
     this.initialize();
   }
 
+  private getConfig(): IResendConfig {
+    return config.get<IResendConfig>("resend");
+  }
+
+  private fromAddress(): string {
+    const { fromEmail, fromName } = this.getConfig();
+    return fromName ? `${fromName} <${fromEmail}>` : fromEmail;
+  }
+
+  private renderAttachments(attachments?: ISendEmailOptions["attachments"]) {
+    if (!attachments?.length) return undefined;
+    return attachments.map((a) => ({
+      filename: a.filename,
+      content: a.content, // base64 string or raw content
+      contentType: a.type
+    }));
+  }
+
   private initialize(): void {
     try {
-      // Get config
-      const sendGridConfig = config.get<ISendGridConfig>("sendgrid");
+      const resendConfig = this.getConfig();
 
-      if (!sendGridConfig.apiKey) {
-        throw new Error("SendGrid API key is not configured");
+      if (!resendConfig.apiKey) {
+        throw new Error("Resend API key is not configured");
       }
 
-      if (!sendGridConfig.fromEmail) {
-        throw new Error("SendGrid from email is not configured");
+      if (!resendConfig.fromEmail) {
+        throw new Error("Resend from email is not configured");
       }
 
-      sgMail.setApiKey(sendGridConfig.apiKey);
+      this.client = new Resend(resendConfig.apiKey);
       this.isInitialized = true;
 
-      logger.info("SendGrid email service initialized successfully", {
-        fromEmail: sendGridConfig.fromEmail,
-        fromName: sendGridConfig.fromName
+      logger.info("Resend email service initialized successfully", {
+        fromEmail: resendConfig.fromEmail,
+        fromName: resendConfig.fromName
       });
     } catch (error) {
-      logger.error("Failed to initialize SendGrid email service", {
+      logger.error("Failed to initialize Resend email service", {
         error: error instanceof Error ? error.message : error
       });
       throw error;
     }
   }
 
-  async sendEmail({
-    to,
-    subject,
-    templateName,
-    templateData,
-    attachments,
-    categories,
-    customArgs
-  }: ISendEmailOptions): Promise<void> {
-    if (!this.isInitialized) {
+  async sendEmail({ to, subject, templateName, templateData, attachments }: ISendEmailOptions): Promise<void> {
+    if (!this.isInitialized || !this.client) {
       throw new Error("Email service is not initialized");
     }
 
+    let html: string;
     try {
-      // Render EJS template
       const templatePath = path.join(__dirname, `../templates/${templateName}.ejs`);
-      const html = await ejs.renderFile(templatePath, templateData);
-
-      const sendGridConfig = config.get<ISendGridConfig>("sendgrid");
-
-      const msg: MailDataRequired = {
-        to,
-        from: {
-          email: sendGridConfig.fromEmail,
-          name: sendGridConfig.fromName
-        },
-        subject,
-        html,
-        ...(attachments && { attachments }),
-        ...(categories && { categories }),
-        ...(customArgs && { customArgs }),
-        trackingSettings: {
-          clickTracking: { enable: true },
-          openTracking: { enable: true }
-        }
-      };
-
-      const [response] = await sgMail.send(msg);
-
-      logger.info("Email sent successfully via SendGrid", {
-        statusCode: response.statusCode,
-        to,
-        subject,
-        templateName,
-        messageId: response.headers["x-message-id"]
-      });
+      html = await ejs.renderFile(templatePath, templateData);
     } catch (error: any) {
-      // Handle EJS rendering errors
       if (error.code === "ENOENT") {
         logger.error("Email template not found", {
           templateName,
@@ -118,100 +100,82 @@ class EmailService {
         });
         throw new Error(`Email template '${templateName}' not found`);
       }
-
-      // SendGrid specific error handling
-      if (error.code) {
-        const errorDetails = {
-          to,
-          subject,
-          templateName,
-          statusCode: error.code,
-          message: error.message,
-          response: error.response?.body
-        };
-
-        logger.error("Failed to send email via SendGrid", errorDetails);
-
-        if (error.code === 401) {
-          throw new Error("SendGrid authentication failed. Please check API key.");
-        } else if (error.code === 403) {
-          throw new Error("SendGrid: Forbidden. Check sender verification and permissions.");
-        } else if (error.code === 413) {
-          throw new Error("Email payload too large. Consider reducing attachments.");
-        } else if (error.code >= 500) {
-          throw new Error("SendGrid service is temporarily unavailable. Please try again later.");
-        }
-      }
-
-      logger.error("An error occurred while sending email", {
-        error: error instanceof Error ? error.message : error,
-        to,
-        subject,
-        templateName
-      });
-
       throw error;
     }
+
+    const { data, error } = await this.client.emails.send({
+      from: this.fromAddress(),
+      to,
+      subject,
+      html,
+      ...(attachments && { attachments: this.renderAttachments(attachments) })
+    });
+
+    if (error) {
+      logger.error("Failed to send email via Resend", {
+        to,
+        subject,
+        templateName,
+        name: (error as any).name,
+        message: (error as any).message
+      });
+      throw new Error(`Resend: ${(error as any).message ?? "failed to send email"}`);
+    }
+
+    logger.info("Email sent successfully via Resend", {
+      id: data?.id,
+      to,
+      subject,
+      templateName
+    });
   }
 
   async sendBulkEmail(recipients: string[], options: Omit<ISendEmailOptions, "to">): Promise<void> {
-    if (!this.isInitialized) {
+    if (!this.isInitialized || !this.client) {
       throw new Error("Email service is not initialized");
     }
 
+    let html: string;
     try {
       const templatePath = path.join(__dirname, `../templates/${options.templateName}.ejs`);
-      const html = await ejs.renderFile(templatePath, options.templateData);
-
-      const sendGridConfig = config.get<ISendGridConfig>("sendgrid");
-
-      const msg: MailDataRequired = {
-        to: recipients,
-        from: {
-          email: sendGridConfig.fromEmail,
-          name: sendGridConfig.fromName
-        },
-        subject: options.subject,
-        html,
-        ...(options.attachments && { attachments: options.attachments }),
-        ...(options.categories && { categories: options.categories }),
-        ...(options.customArgs && { customArgs: options.customArgs }),
-        trackingSettings: {
-          clickTracking: { enable: true },
-          openTracking: { enable: true }
-        }
-      };
-
-      const [response] = await sgMail.send(msg);
-
-      logger.info("Bulk email sent successfully via SendGrid", {
-        statusCode: response.statusCode,
-        recipientCount: recipients.length,
-        subject: options.subject,
-        templateName: options.templateName
-      });
+      html = await ejs.renderFile(templatePath, options.templateData);
     } catch (error: any) {
-      logger.error("Failed to send bulk email via SendGrid", {
+      if (error.code === "ENOENT") {
+        throw new Error(`Email template '${options.templateName}' not found`);
+      }
+      throw error;
+    }
+
+    const { data, error } = await this.client.emails.send({
+      from: this.fromAddress(),
+      to: recipients,
+      subject: options.subject,
+      html,
+      ...(options.attachments && {
+        attachments: this.renderAttachments(options.attachments)
+      })
+    });
+
+    if (error) {
+      logger.error("Failed to send bulk email via Resend", {
         recipientCount: recipients.length,
         subject: options.subject,
         templateName: options.templateName,
-        error: error.message,
-        response: error.response?.body
+        message: (error as any).message
       });
-
-      throw new Error(`Failed to send bulk email: ${error.message}`);
+      throw new Error(`Failed to send bulk email: ${(error as any).message}`);
     }
+
+    logger.info("Bulk email sent successfully via Resend", {
+      id: data?.id,
+      recipientCount: recipients.length,
+      subject: options.subject,
+      templateName: options.templateName
+    });
   }
 
   async verifyConnection(): Promise<boolean> {
-    try {
-      return this.isInitialized;
-    } catch (error) {
-      logger.error("SendGrid connection verification failed", {
-        error: error instanceof Error ? error.message : error
-      });
-      return false;
-    }
+    return this.isInitialized;
   }
 }
 

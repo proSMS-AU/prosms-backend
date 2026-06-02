@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Types } from "mongoose";
 import { StudentModel } from "../model/student.model";
+import { StudentAuditModel } from "../model/student-audit.model";
+import { logActivity } from "../utils/activityLogger";
 import { AddStudentT, UpdateStudentT } from "../schemas/student.schema";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { BAD_REQUEST, CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus } from "../constants";
 import { AppError } from "../utils/appError";
-import { generateSequentialId } from "../utils/sequentialIdGenerator";
+import { generateSequentialId, generateStudentId } from "../utils/sequentialIdGenerator";
 
 const buildSortStage = (sortParam?: string) => {
   const sort = sortParam?.trim() || "-createdAt";
@@ -33,12 +35,8 @@ const addNewStudent = async (data: AddStudentT, organizationId: string) => {
     throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "Organization ID is required");
   }
 
-  // Generate unique student ID
-  const studentId = await generateSequentialId({
-    key: `student:${organizationId}`,
-    prefix: "STU",
-    pad: 7
-  });
+  // Generate unique student ID — format: STU-YYYYMM-NNNNNN (e.g. STU-202605-000042)
+  const studentId = await generateStudentId(organizationId);
 
   // Generate unique student AVETMISS ID
   const avetmissId = await generateSequentialId({
@@ -69,8 +67,8 @@ const addNewStudent = async (data: AddStudentT, organizationId: string) => {
 
 // get all students with comprehensive filtering
 const getAllStudents = async (query: Record<string, string>, organizationId: string) => {
-  // Step 1: Build base filter with organizationId
-  const baseFilter: any = { organizationId };
+  // Step 1: Build base filter with organizationId — exclude soft-deleted (R-01)
+  const baseFilter: any = { organizationId, isDeleted: { $ne: true } };
 
   // Step 2: Build advanced filters
   const advancedFilters: any = {};
@@ -178,6 +176,24 @@ const getAllStudents = async (query: Record<string, string>, organizationId: str
     // We'll handle this separately after the base query
   }
 
+  // E-04: Enrollment status filter — "enrolled" | "not_enrolled" (cross-class lookup)
+  if (query.enrollmentStatus === "enrolled" || query.enrollmentStatus === "not_enrolled") {
+    const { ClassModel } = await import("../model/class.model");
+    const enrolledClasses = await ClassModel.find({ organizationId }).select("enrollments.studentInfo.id").lean();
+    const enrolledStudentIds = new Set<string>();
+    for (const cls of enrolledClasses) {
+      for (const enr of (cls as any).enrollments ?? []) {
+        if (enr.studentInfo?.id) enrolledStudentIds.add(enr.studentInfo.id);
+      }
+    }
+    const idArray = Array.from(enrolledStudentIds).map((id) => new Types.ObjectId(id));
+    if (query.enrollmentStatus === "enrolled") {
+      advancedFilters["_id"] = { $in: idArray };
+    } else {
+      advancedFilters["_id"] = { $nin: idArray };
+    }
+  }
+
   // Step 3: Combine base and advanced filters
   const combinedFilter = { ...baseFilter, ...advancedFilters };
 
@@ -197,6 +213,7 @@ const getAllStudents = async (query: Record<string, string>, organizationId: str
   delete cleanQuery.usi;
   delete cleanQuery.status;
   delete cleanQuery.qualification;
+  delete (cleanQuery as any).enrollmentStatus;
 
   // Step 5: Build searchable fields
   const searchableFields = [
@@ -338,7 +355,7 @@ const getAllStudents = async (query: Record<string, string>, organizationId: str
 // get a single student via Id
 const getStudentById = async (studentId: string) => {
   const student = await StudentModel.findById(studentId);
-  if (!student) {
+  if (!student || student.isDeleted) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
   }
   return student;
@@ -395,34 +412,85 @@ const updateStudent = async (studentId: string, data: UpdateStudentT) => {
   return student;
 };
 
-// delete a single student
-const deleteStudent = async (studentId: string) => {
-  const student = await StudentModel.findByIdAndDelete(studentId);
+// Soft-delete a student — keeps the record for ASQA/AVETMISS reports (R-01)
+const deleteStudent = async (studentId: string, actorUserId?: string) => {
+  const student = await StudentModel.findByIdAndUpdate(
+    studentId,
+    { $set: { isDeleted: true, deletedAt: new Date() } },
+    { new: true }
+  );
   if (!student) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Student not found");
   }
+
+  await StudentAuditModel.create({
+    organizationId: student.organizationId,
+    studentId: student.studentId,
+    studentObjectId: student._id,
+    action: "deleted",
+    studentSnapshot: {
+      givenName: student.personalInfo?.givenName,
+      surname: student.personalInfo?.surname,
+      email: student.contactDetails?.email,
+      studentId: student.studentId
+    },
+    actorUserId: actorUserId ? new Types.ObjectId(actorUserId) : undefined
+  });
+
+  logActivity({
+    organizationId: String(student.organizationId),
+    actorUserId,
+    entityType: "student",
+    entityId: String(student._id),
+    entityLabel: `${student.personalInfo?.givenName ?? ""} ${student.personalInfo?.surname ?? ""}`.trim(),
+    action: "delete",
+  });
 };
 
-// Get unique values for filter dropdowns
+// Get unique values for filter dropdowns — exclude soft-deleted (R-01)
+const activeFilter = (organizationId: string) => ({ organizationId, isDeleted: { $ne: true } });
+
 const getUniqueLocations = async (organizationId: string) => {
-  const cities = await StudentModel.distinct("address.primaryPostalAddress.city", {
-    organizationId
-  });
+  const cities = await StudentModel.distinct("address.primaryPostalAddress.city", activeFilter(organizationId));
   return cities.filter(Boolean).sort();
 };
 
 const getUniqueStates = async (organizationId: string) => {
-  const states = await StudentModel.distinct("address.primaryPostalAddress.state", {
-    organizationId
-  });
+  const states = await StudentModel.distinct("address.primaryPostalAddress.state", activeFilter(organizationId));
   return states.filter(Boolean).sort();
 };
 
 const getUniqueCountries = async (organizationId: string) => {
-  const countries = await StudentModel.distinct("address.primaryPostalAddress.country", {
-    organizationId
-  });
+  const countries = await StudentModel.distinct("address.primaryPostalAddress.country", activeFilter(organizationId));
   return countries.filter(Boolean).sort();
+};
+
+const getDeletedStudents = async (organizationId: string) => {
+  return StudentModel.find({ organizationId, isDeleted: true })
+    .select("personalInfo contactDetails studentId deletedAt")
+    .sort({ deletedAt: -1 })
+    .lean();
+};
+
+const restoreStudent = async (studentId: string, organizationId: string) => {
+  const student = await StudentModel.findOneAndUpdate(
+    { _id: studentId, organizationId, isDeleted: true },
+    { $set: { isDeleted: false }, $unset: { deletedAt: "" } },
+    { new: true }
+  );
+  if (!student) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Deleted student not found");
+  }
+
+  logActivity({
+    organizationId,
+    entityType: "student",
+    entityId: String(student._id),
+    entityLabel: `${student.personalInfo?.givenName ?? ""} ${student.personalInfo?.surname ?? ""}`.trim(),
+    action: "restore",
+  });
+
+  return student;
 };
 
 export const StudentServices = {
@@ -431,6 +499,8 @@ export const StudentServices = {
   getStudentById,
   updateStudent,
   deleteStudent,
+  getDeletedStudents,
+  restoreStudent,
   getUniqueLocations,
   getUniqueStates,
   getUniqueCountries

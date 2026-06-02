@@ -22,10 +22,15 @@ class PersonalInfo {
   middleName?: string;
 
   @Prop({
-    required: true,
     type: String
   })
-  surname: string;
+  surname?: string;
+
+  @Prop({
+    type: Boolean,
+    default: false
+  })
+  isSingleName?: boolean;
 
   @Prop({
     type: String
@@ -90,6 +95,7 @@ class ParticipantsIdentifiers {
 
   @Prop()
   saceStudentId?: string;
+
 }
 
 class EmploymentDetails {
@@ -144,6 +150,12 @@ class PrimaryPostalAddress {
   @Prop()
   street?: string;
 
+  @Prop()
+  streetNumber?: string;
+
+  @Prop()
+  streetName?: string;
+
   @Prop({
     type: String
   })
@@ -179,6 +191,12 @@ class PrimaryStreetAddress {
 
   @Prop()
   street?: string;
+
+  @Prop()
+  streetNumber?: string;
+
+  @Prop()
+  streetName?: string;
 
   @Prop()
   POBox?: string;
@@ -302,9 +320,7 @@ class VETDetails {
   @Prop()
   surveyContactStatus?: string;
 
-  @Prop({
-    default: []
-  })
+  @Prop({ type: () => [String], default: [] })
   disabilityTypes?: string[];
 }
 
@@ -448,6 +464,29 @@ export class Student {
     _id: false
   })
   additionalInformation?: AdditionalInformation;
+
+  // Soft-delete support — deleted students stay in reports (R-01, R-10)
+  @Prop({ type: Boolean, default: false })
+  isDeleted: boolean;
+
+  @Prop({ type: Date, default: null })
+  deletedAt?: Date | null;
+
+  // Per-student AVETMISS opt-out (R-11)
+  @Prop({ type: Boolean, default: false })
+  doNotReportAvetmiss?: boolean;
+
+  // Funding source at student level; class fundDetails is the fallback default (R-06)
+  @Prop({ type: String })
+  fundingSourceNational?: string;
+
+  // Apprenticeship flag — shows apprenticeship panel in enrolment form (R-19)
+  @Prop({ type: Boolean, default: false })
+  isApprentice?: boolean;
+
+  // Set to true for students created via NAT file import (SA-06)
+  @Prop({ type: Boolean, default: false })
+  importedFromNat?: boolean;
 }
 
 export const StudentModel = getModelForClass(Student);

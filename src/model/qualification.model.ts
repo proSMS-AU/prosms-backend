@@ -56,5 +56,9 @@ export class Qualification {
 
   @Prop()
   nominalHours?: number;
+
+  // AVETMISS Release 8.1: OSCA identifier at NAT00030A pos 124, length 6 (replaces ANZSCO)
+  @Prop({ type: String })
+  oscaIdentifier?: string;
 }
 export const QualificationModel = getModelForClass(Qualification);

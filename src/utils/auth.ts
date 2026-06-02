@@ -109,6 +109,28 @@ import { logger } from "./logger";
 
 let authInstance: ReturnType<typeof betterAuth> | null = null;
 
+export const pendingOtpCaptures = new Map<string, string>();
+
+function parseDeviceFromUA(ua: string | undefined): string {
+  if (!ua) return "Unknown device";
+  const browsers = [
+    { name: "Chrome", pattern: /Chrome\/[\d.]+/ },
+    { name: "Firefox", pattern: /Firefox\/[\d.]+/ },
+    { name: "Safari", pattern: /Version\/[\d.]+ Safari/ },
+    { name: "Edge", pattern: /Edg\/[\d.]+/ }
+  ];
+  const oses = [
+    { name: "Windows", pattern: /Windows/ },
+    { name: "macOS", pattern: /Mac OS X/ },
+    { name: "iOS", pattern: /iPhone|iPad/ },
+    { name: "Android", pattern: /Android/ },
+    { name: "Linux", pattern: /Linux/ }
+  ];
+  const browser = browsers.find((b) => b.pattern.test(ua))?.name ?? "Browser";
+  const os = oses.find((o) => o.pattern.test(ua))?.name ?? "Desktop";
+  return `${browser} on ${os}`;
+}
+
 export function initializeAuth() {
   if (!authInstance) {
     const db = getMongoDb();
@@ -133,12 +155,47 @@ export function initializeAuth() {
               }
             })
           }
+        },
+        session: {
+          create: {
+            after: async (session) => {
+              try {
+                const baUser = await db!.collection("user").findOne({ id: (session as any).userId });
+                if (!baUser?.email) return;
+                const ua = (session as any).userAgent as string | undefined;
+                const device = parseDeviceFromUA(ua);
+                const ip = (session as any).ipAddress as string | undefined;
+                const time = new Date().toLocaleString("en-AU", {
+                  timeZone: "Australia/Sydney",
+                  dateStyle: "medium",
+                  timeStyle: "short"
+                });
+                emailService
+                  .sendEmail({
+                    to: baUser.email,
+                    subject: "New sign-in to your ProSMS account",
+                    templateName: "new-login",
+                    templateData: { name: baUser.name || baUser.email, device, time, ipAddress: ip || null }
+                  })
+                  .catch(() => {});
+              } catch {
+                /* never block session creation */
+              }
+            }
+          }
         }
       },
       advanced: {
         disableOriginCheck: !isProduction,
         cookie: { sameSite: "none", secure: true },
         defaultCookieAttributes: { secure: true, sameSite: "none" }
+      },
+      // Max session lifetime. "Remember me" is enforced client-side via the
+      // bearer_token cookie maxAge; the server session must stay valid at least
+      // as long as a remembered cookie (30 days).
+      session: {
+        expiresIn: 60 * 60 * 24 * 30, // 30 days
+        updateAge: 60 * 60 * 24 // refresh expiry at most once per day
       },
       secret: config.get<string>("server.betterAuthSecret"),
       debug: !isProduction,
@@ -163,9 +220,14 @@ export function initializeAuth() {
           otpLength: 6,
           expiresIn: 300, // 5 minutes
           async sendVerificationOTP({ email, otp, type }) {
-            logger.info("Sending OTP", { email, otp, type }); //TODO: Remove this log before production
             // only handle sign-in 2FA here
             if (type !== "sign-in") return;
+
+            // If a TOTP capture is pending for this email, intercept instead of emailing
+            if (pendingOtpCaptures.has(email)) {
+              pendingOtpCaptures.set(email, otp);
+              return;
+            }
 
             await emailService.sendEmail({
               to: email,

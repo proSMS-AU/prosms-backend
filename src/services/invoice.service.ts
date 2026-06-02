@@ -430,9 +430,54 @@ const deleteInvoiceById = async (invoiceId: string) => {
   return invoice;
 };
 
+// Bulk create invoices for multiple students in the same class
+const bulkCreateInvoices = async (
+  classId: string,
+  studentIds: string[],
+  templateId: string,
+  organizationId: string,
+  createdBy: string
+) => {
+  const results: { studentId: string; success: boolean; invoiceId?: string; reason?: string }[] = [];
+
+  for (const studentId of studentIds) {
+    try {
+      const student = await StudentModel.findById(studentId);
+      if (!student) {
+        results.push({ studentId, success: false, reason: "Student not found" });
+        continue;
+      }
+
+      const addr = (student.address as any)?.primaryPostalAddress;
+      const snapshot: AutoInvoiceStudentSnapshotT = {
+        id: studentId,
+        name: `${student.personalInfo.givenName} ${student.personalInfo.surname ?? ""}`.trim(),
+        email: student.contactDetails?.email ?? "",
+        phone: (student.contactDetails as any)?.personalPhone ?? "",
+        address: {
+          street: addr?.street ?? "N/A",
+          city: addr?.city ?? "N/A",
+          state: addr?.state ?? "N/A",
+          postcode: addr?.postCode ?? "N/A",
+          country: addr?.country ?? "Australia"
+        }
+      };
+
+      const invoice = await generateAutoInvoice(templateId, studentId, snapshot, [classId], createdBy, organizationId);
+      results.push({ studentId, success: true, invoiceId: String((invoice as any)._id) });
+    } catch (err: unknown) {
+      const msg = err instanceof AppError ? err.message : "Unknown error";
+      results.push({ studentId, success: false, reason: msg });
+    }
+  }
+
+  return results;
+};
+
 export const InvoiceServices = {
   generateManualInvoice,
   generateAutoInvoice,
+  bulkCreateInvoices,
   getAutoInvoices,
   getManualInvoices,
   getInvoiceById,

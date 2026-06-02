@@ -112,6 +112,33 @@ const updateCourseEnrollAndCompleteDateHandler = async (req: Request, res: Respo
   });
 };
 
+// E-03 — Bulk enrol multiple students into one class
+const bulkEnrollStudentsHandler = async (req: Request, res: Response) => {
+  const classId = req.params.id;
+  const { studentIds, unitIds } = req.body as { studentIds: string[]; unitIds: string[] };
+
+  if (!Array.isArray(studentIds) || studentIds.length === 0) {
+    throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "studentIds must be a non-empty array");
+  }
+
+  const result = await EnrollmentServices.bulkEnrollStudents(classId, studentIds, unitIds ?? []);
+  SendSuccessResponse.created({
+    res,
+    message: `Bulk enrol complete — ${result.success.length} enrolled, ${result.failed.length} failed`,
+    data: result
+  });
+};
+
+const bulkUpdateDatesHandler = async (req: Request, res: Response) => {
+  const { classId, studentIds, dates } = req.body as {
+    classId: string;
+    studentIds: string[];
+    dates: { enrollmentDate?: string; unitStartDate?: string; unitEndDate?: string };
+  };
+  const result = await EnrollmentServices.bulkUpdateDates(classId, studentIds, dates);
+  SendSuccessResponse.updated({ res, message: `Updated dates for ${result.updatedCount} enrollment(s)`, data: result });
+};
+
 export const EnrollmentController = {
   addEnrollmentHandler,
   addEnrollmentWithNotifyHandler,
@@ -119,5 +146,7 @@ export const EnrollmentController = {
   enrolledUnitUpdateHandler,
   enrolledUnitsBulkUpdateHandler,
   unitsStatusBulkUpdateHandler,
-  updateCourseEnrollAndCompleteDateHandler
+  updateCourseEnrollAndCompleteDateHandler,
+  bulkEnrollStudentsHandler,
+  bulkUpdateDatesHandler
 };

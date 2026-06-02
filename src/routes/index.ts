@@ -21,7 +21,11 @@ import invoiceRouter from "./invoice.route";
 import usiRouter from "./usi.routes";
 import asqaRoutes from "./asqa.route";
 import locationRouter from "./location.route";
+import deliveryLocationRouter from "./deliveryLocation.route";
 import avetmissRoutes from "./avetmiss.route";
+import specificFundingIdentifierRouter from "./specificFundingIdentifier.route";
+import activityLogRouter from "./activityLog.route";
+import twoFactorRouter from "./twoFactor.route";
 const router = express.Router();
 
 const PROJECT_NAME: string = config.get<string>("server.projectName") || "Pro SMS";
@@ -59,5 +63,9 @@ router.use("/usi", sessionValidator(), usiRouter);
 router.use("/report/asqa", sessionValidator(), asqaRoutes);
 router.use("/report/avetmiss", sessionValidator(), avetmissRoutes);
 router.use("/location", sessionValidator(), locationRouter);
+router.use("/delivery-location", sessionValidator(), deliveryLocationRouter);
+router.use("/specific-funding-identifier", sessionValidator(), specificFundingIdentifierRouter);
+router.use("/activity-log", sessionValidator(), activityLogRouter);
+router.use("/auth/2fa", sessionValidator(), twoFactorRouter);
 
 export default router;

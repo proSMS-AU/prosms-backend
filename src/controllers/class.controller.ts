@@ -1,4 +1,5 @@
 import { ClassServices } from "../services/class.service";
+import { EnrollmentServices } from "../services/enrollment.service";
 import { Request, Response } from "express";
 import { SendSuccessResponse } from "../utils";
 
@@ -118,6 +119,12 @@ const getUniqueTrainersHandler = async (req: Request, res: Response) => {
   });
 };
 
+const bulkEnrollStudentsHandler = async (req: Request, res: Response) => {
+  const { studentIds, unitIds } = req.body as { studentIds: string[]; unitIds: string[] };
+  const result = await EnrollmentServices.bulkEnrollStudents(req.params.id, studentIds, unitIds);
+  SendSuccessResponse.success({ res, message: "Bulk enrollment completed", data: result });
+};
+
 export const ClassControllers = {
   addClassHandler,
   getAllClassesHandler,
@@ -128,5 +135,6 @@ export const ClassControllers = {
   getCertificateGeneratedClassesHandler,
   getStudentEnrolledClassesHandler,
   getUniqueLocationsHandler,
-  getUniqueTrainersHandler
+  getUniqueTrainersHandler,
+  bulkEnrollStudentsHandler
 };

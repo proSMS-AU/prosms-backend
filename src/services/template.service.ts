@@ -15,7 +15,7 @@ interface CreateTemplateInput {
   templatePage2Key?: string;
   isMultiPageTemplate: boolean;
   description?: string;
-  organizationId: string;
+  organizationId?: string;
   placeholders: string[];
 }
 

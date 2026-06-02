@@ -5,11 +5,20 @@ const PersonalInfoSchema = object({
   title: string().min(1, "Title is required"),
   givenName: string().min(1, "Given name is required"),
   middleName: string().optional(),
-  surname: string().min(1, "Surname is required"),
+  surname: string().optional(),
+  isSingleName: boolean().optional(),
   preferredName: string().optional(),
   gender: string().min(1, "Gender is required"),
   dateOfBirth: string().min(1, "Date of birth is required")
-});
+}).refine(
+  (data) => {
+    if (!data.isSingleName) {
+      return data.surname && data.surname.trim().length >= 1;
+    }
+    return true;
+  },
+  { message: "Surname is required", path: ["surname"] }
+);
 
 const EmploymentDetailsSchema = object({
   organization: string().optional(),
@@ -31,7 +40,8 @@ const ParticipantsIdentifiersSchema = object({
   isUSIVerified: boolean({ error: "USI verification status is required" }),
   LUI: string().optional(),
   workReadyParticipantNumber: string().optional(),
-  saceStudentId: string().optional()
+  saceStudentId: string().optional(),
+  oscaIdentifier: string().max(6).optional()
 }).refine(
   (data) => {
     if (data.isUSIVerified) {
@@ -56,6 +66,8 @@ const PrimaryPostalAddressSchema = object({
   building: string().optional(),
   unit: string().optional(),
   street: string().optional(),
+  streetNumber: string().max(15).optional(),
+  streetName: string().max(70).optional(),
   POBox: string().optional(),
   city: string().min(1, "City is required"),
   state: string().min(1, "State is required"),
@@ -67,6 +79,8 @@ const PrimaryStreetAddressSchema = object({
   building: string().optional(),
   unit: string().optional(),
   street: string().optional(),
+  streetNumber: string().max(15).optional(),
+  streetName: string().max(70).optional(),
   POBox: string().optional(),
   city: string().optional(),
   state: string().optional(),
@@ -85,6 +99,9 @@ const PriorEducationalAchievementSchema = object({
   completedYear: string().min(2, "Completed year must be at least 2 characters")
 });
 
+// AVETMISS NAT00080 valid Highest School Level Completed codes
+const VALID_EDUCATION_LEVEL_CODES = ["02", "08", "09", "10", "11", "12", "@@"] as const;
+
 const VETDetailsSchema = object({
   birthCountry: string().min(1, "Birth country is required"),
   birthCity: string().min(1, "Birth city is required"),
@@ -99,7 +116,10 @@ const VETDetailsSchema = object({
   englishProficiency: string().optional(),
   englishAssistance: boolean().optional(),
   atSchool: boolean().optional(),
-  educationLevel: string().optional(),
+  educationLevel: string().optional().refine(
+    (val) => !val || VALID_EDUCATION_LEVEL_CODES.includes(val as typeof VALID_EDUCATION_LEVEL_CODES[number]),
+    { message: `Education level must be one of: ${VALID_EDUCATION_LEVEL_CODES.join(", ")}` }
+  ),
   // completedYear: string().optional(),
   priorEducationalAchievements: array(PriorEducationalAchievementSchema).optional(),
   disabilities: boolean().nullable().default(null),
@@ -173,7 +193,11 @@ export const StudentSchema = object({
   participantsIdentifiers: ParticipantsIdentifiersSchema,
   emergencyContacts: EmergencyContactsSchema,
   parents: ParentsSchema,
-  additionalInformation: AdditionalInformationSchema
+  additionalInformation: AdditionalInformationSchema,
+  // AVETMISS reporting flags
+  doNotReportAvetmiss: boolean().optional(),
+  isApprentice: boolean().optional(),
+  fundingSourceNational: string().optional()
 });
 
 // UPDATE SCHEMA - everything optional (deep partial manually)
@@ -294,7 +318,11 @@ export const UpdateStudentSchema = object({
     comment: string().optional(),
     noteType: string().optional(),
     contactStatus: string().optional()
-  }).optional()
+  }).optional(),
+  // AVETMISS reporting flags
+  doNotReportAvetmiss: boolean().optional(),
+  isApprentice: boolean().optional(),
+  fundingSourceNational: string().optional()
 });
 
 export const StudentRequestSchema = object({

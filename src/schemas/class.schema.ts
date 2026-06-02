@@ -138,7 +138,24 @@ const EnrollmentsSchema = object({
     })
   ),
   completionDate: string().nullable().default(null),
-  studyReason: string().optional()
+  studyReason: string().optional(),
+  outcomeIdentifierNational: string().optional(),
+  issuedFlag: string().optional(),
+  // Apprenticeship fields — NAT00120 pos 77/87 (max 10 chars each, both-or-neither)
+  trainingContractId: string().max(10, "Training contract ID must be at most 10 characters").optional(),
+  apprenticeshipClientId: string().max(10, "Apprenticeship client ID must be at most 10 characters").optional(),
+  // NAT00120 pos 76 override — blank = auto-derive; "3"=commencing, "4"=continuing, "8"=UoC/SOA
+  commencingProgramOverride: string().optional()
+}).superRefine((data, ctx) => {
+  const hasContract = !!(data.trainingContractId ?? "").trim();
+  const hasClient = !!(data.apprenticeshipClientId ?? "").trim();
+  if (hasContract !== hasClient) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [hasContract ? "apprenticeshipClientId" : "trainingContractId"],
+      message: "Both Training Contract ID and Apprenticeship Client ID must be provided together"
+    });
+  }
 });
 
 // Main Class Schema
@@ -148,7 +165,8 @@ export const ClassSchema = object({
   classDetails: ClassDetailsSchema,
   reportingDetails: ReportingDetailsSchema,
   fundDetails: FundDetailsSchema,
-  enrollments: array(EnrollmentsSchema).nullable().optional()
+  enrollments: array(EnrollmentsSchema).nullable().optional(),
+  deliveryLocationId: ObjectIdSchema.optional()
 });
 
 export const DeleteUnitsFromClassEnrollmentSchema = object({
@@ -170,7 +188,8 @@ export const UpdateClassSchema = object({
   classDetails: UpdateClassDetailsSchema.optional(),
   reportingDetails: UpdateReportingDetailsSchema.optional(),
   fundDetails: UpdateFundDetailsSchema.optional(),
-  enrollments: array(EnrollmentsSchema).nullable().optional()
+  enrollments: array(EnrollmentsSchema).nullable().optional(),
+  deliveryLocationId: ObjectIdSchema.optional()
 });
 
 // Request Schemas for Express

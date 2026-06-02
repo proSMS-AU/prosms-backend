@@ -83,18 +83,35 @@
 import { fromNodeHeaders } from "better-auth/node";
 import { NextFunction, Request, Response } from "express";
 import { auth, SendErrorResponse } from "../utils";
+import { AuthModel } from "../model/auth.model";
 
 type ROLE = "SUPER_ADMIN" | "ADMIN";
 
-const setRequestUser = (req: Request, session: any) => {
+const setRequestUser = async (req: Request, session: any) => {
+  const email = session.user.email as string;
+
+  // Resolve to the AuthModel ObjectId so controllers/services can use findById
+  const authDoc = await AuthModel.findOneAndUpdate(
+    { email },
+    {
+      $setOnInsert: {
+        name: (session.user.name as string) || email,
+        email,
+        // @ts-ignore
+        organizationId: (session.user.organizationId as string) || "unassigned",
+      },
+    },
+    { upsert: true, new: true }
+  );
+
   req.user = {
-    _id: session.user.id,
+    _id: authDoc._id.toString(),
     name: session.user.name,
-    email: session.user.email,
+    email,
     password: "",
     // @ts-ignore
     role: session.user.role,
-    organizationId: session.user.organizationId
+    organizationId: authDoc.organizationId
   };
 };
 
@@ -139,7 +156,7 @@ export const sessionValidator =
         });
       }
 
-      setRequestUser(req, session);
+      await setRequestUser(req, session);
       next();
     } catch (error) {
       return SendErrorResponse.internalServer({

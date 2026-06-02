@@ -545,7 +545,8 @@ const generateCertificates = async (data: GenerateCertificateT, organizationId: 
               "enrollments.$.certificateId": certificate._id,
               "enrollments.$.certificateIssuedDate": issuedDate,
               "enrollments.$.certificateShortId": certificateShortId,
-              "enrollments.$.certificateKey": certificate.certificateKey
+              "enrollments.$.certificateKey": certificate.certificateKey,
+              "enrollments.$.issuedFlag": "Y"
             }
           }
         );
@@ -894,8 +895,34 @@ const deleteCertificate = async (id: string) => {
   await CertificateModel.findByIdAndDelete(id);
 };
 
+// E-01: Generate certificates for a single student across multiple class enrollments
+const generateCertificatesForStudent = async (
+  studentId: string,
+  classIds: string[],
+  templateId: string,
+  organizationId: string
+) => {
+  const results: { classId: string; success: boolean; reason?: string }[] = [];
+
+  for (const classId of classIds) {
+    try {
+      await generateCertificates(
+        { classId, templateId, students: [{ id: studentId }] },
+        organizationId
+      );
+      results.push({ classId, success: true });
+    } catch (err: unknown) {
+      const msg = err instanceof AppError ? err.message : "Unknown error";
+      results.push({ classId, success: false, reason: msg });
+    }
+  }
+
+  return results;
+};
+
 export const CertificateServices = {
   generateCertificates,
+  generateCertificatesForStudent,
   getCertificatesByClass,
   verifyCertificate,
   sendCertificateToStudentEmail,

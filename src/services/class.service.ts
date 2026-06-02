@@ -141,6 +141,26 @@ const getClassById = async (classId: string) => {
   if (!classData) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
   }
+
+  // Enrich enrollments with per-student doNotReportAvetmiss flag
+  if (classData.enrollments && classData.enrollments.length > 0) {
+    const studentIds = classData.enrollments.map((e) => e.studentInfo.id).filter(Boolean);
+    const students = await StudentModel.find({ _id: { $in: studentIds } })
+      .select("_id doNotReportAvetmiss")
+      .lean();
+    const doNotReportMap = new Map(students.map((s) => [s._id.toString(), s.doNotReportAvetmiss ?? false]));
+
+    const classObj = classData.toObject();
+    classObj.enrollments = classObj.enrollments.map((e: any) => ({
+      ...e,
+      studentInfo: {
+        ...e.studentInfo,
+        doNotReportAvetmiss: doNotReportMap.get(e.studentInfo.id?.toString()) ?? false
+      }
+    }));
+    return classObj;
+  }
+
   return classData;
 };
 

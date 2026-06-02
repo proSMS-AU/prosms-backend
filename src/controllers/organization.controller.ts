@@ -46,9 +46,19 @@ const getOrganizationStatsHandler = async (req: Request, res: Response) => {
   });
 };
 
+const updateOrganizationHandler = async (req: Request, res: Response) => {
+  const organization = await OrganizationServices.updateOrganization(req.params.id, req.body);
+  SendSuccessResponse.success({
+    res,
+    message: "Organization updated successfully!",
+    data: organization
+  });
+};
+
 export const organizationControllers = {
   getAllOrganizationsHandler,
   getOrganizationHandler,
   getOrganizationByIdHandler,
-  getOrganizationStatsHandler
+  getOrganizationStatsHandler,
+  updateOrganizationHandler
 };

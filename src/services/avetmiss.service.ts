@@ -13,6 +13,7 @@ import { CloudflareService } from "./cloudflare.service";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus, UNIT_COMPETENCY_MAP } from "../constants";
 import { AvetmissReportModel } from "../model/avetmiss-report.model";
+import { DeliveryLocationModel } from "../model/delivery-location.model";
 import { GenerateAvetmissReportT } from "../schemas/avetmiss-report.schema";
 import { Readable } from "stream";
 import axios from "axios";
@@ -20,6 +21,7 @@ import { Response } from "express";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { generateSequentialId } from "../utils/sequentialIdGenerator";
 import AdmZip from "adm-zip";
+import { importFromNatZip } from "./nat-import.service";
 
 // ─── HELPER FUNCTIONS ──────────────────────────────────────────────────────────
 
@@ -561,8 +563,16 @@ const generateNAT00020 = async (
 };
 
 /**
- * NAT00030 — Program File (Qualifications)
+ * NAT00030A — Program File (Qualifications)
  * One record per unique qualification referenced in NAT00120 within the date range.
+ *
+ * Record layout (130 chars):
+ *   Pos   1–10  : Program identifier          (10, A)
+ *   Pos  11–110 : Program name                (100, A)
+ *   Pos 111–114 : Total nominal hours         (4, N)
+ *   Pos 115–123 : Reserved / blank            (9)
+ *   Pos 124–129 : OSCA identifier             (6, A) — Release 8.1, replaces ANZSCO
+ *   Pos 130     : Blank                       (1)
  *
  * FIX (MEDIUM): Logs a warning if nominalHours is null/undefined (Rule #3401 warning).
  */
@@ -576,13 +586,16 @@ const generateNAT00030 = async (qualificationIds: string[]): Promise<string> => 
     .map((qual) => {
       if (qual.nominalHours == null) {
         console.warn(
-          `[AVETMISS] NAT00030: Qualification "${qual.code}" has no nominalHours — ` +
+          `[AVETMISS] NAT00030A: Qualification "${qual.code}" has no nominalHours — ` +
             `writing "0000". This will trigger NCVER warning #3401.`
         );
       }
-      const line = [padA(qual.code, 10), padA(qual.title, 100), padN(qual.nominalHours ?? 0, 4)]
-        .join("")
-        .padEnd(130, " ");
+      const base =
+        padA(qual.code, 10) +
+        padA(qual.title, 100) +
+        padN(qual.nominalHours ?? 0, 4);
+      // Pad to pos 123 (9 reserved blank chars), then write OSCA at pos 124–129
+      const line = base.padEnd(123, " ") + padA(qual.oscaIdentifier ?? "", 6).padEnd(7, " ");
       return `${line}\n`;
     })
     .join("");
@@ -645,7 +658,7 @@ const generateNAT00060 = async (unitCodes: string[], organizationId: string): Pr
         padA(unit.code, 12), // Pos   1–12 : Subject identifier      (12, A)
         padA(unit.title, 100), // Pos  13–112: Subject name             (100, A)
         foeId, // Pos 113–118: Subject FOE identifier   (6, A) spaces if unknown
-        padA("Y", 1), // Pos 119    : VET flag                 (1, A) — always Y for VET units
+        padA((unit as any).vetFlag ?? "Y", 1), // Pos 119    : VET flag — "Y" for VET units, "N" for non-vocational
         padN(unit.hour ?? 0, 4) // Pos 120–123: Nominal hours            (4, N)
       ].join("");
       return line + "\n";
@@ -797,8 +810,8 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
     const stateCode = getClientStateCode(addr?.state, postcode);
     const building = (addr?.building ?? "").substring(0, 50);
     const unit = (addr?.unit ?? "").substring(0, 30);
-    const streetNumber = ((addr as any)?.streetNumber ?? "not specified").toString().substring(0, 15);
-    const streetName = ((addr?.street ?? "").trim() || "not specified").substring(0, 70);
+    const streetNumber = (addr?.streetNumber ?? "").toString().substring(0, 15);
+    const streetName = ((addr?.streetName ?? addr?.street ?? "").trim() || "not specified").substring(0, 70);
     const surveyStatus = getSurveyContactStatusCode(vet?.surveyContactStatus);
 
     const record = " ".repeat(327).split("");
@@ -907,7 +920,7 @@ const generateNAT00085 = async (studentIds: string[]): Promise<string> => {
 
     // Street / PO Box logic (Rule #3837):
     // Street name must not be blank unless postal delivery box is populated
-    const streetValue = (addr?.street ?? "").trim();
+    const streetValue = (addr?.streetName ?? addr?.street ?? "").trim();
     const poBoxValue = (addr?.POBox ?? "").trim();
     const streetName = streetValue || (poBoxValue ? "" : "not specified");
     const postalBox = !streetValue ? poBoxValue : ""; // only write box when no street
@@ -934,7 +947,7 @@ const generateNAT00085 = async (studentIds: string[]): Promise<string> => {
       console.warn(`[AVETMISS] NAT00085: Student "${avetmissId}" has blank suburb — warn #4630.`);
     }
     // Warning #3833: street number should not be blank when street name exists
-    if (streetValue && !((addr as any)?.streetNumber ?? "").toString().trim()) {
+    if (streetValue && !(addr?.streetNumber ?? "").toString().trim()) {
       console.warn(
         `[AVETMISS] NAT00085: Student "${avetmissId}" has street name but blank street number — warn #3833.`
       );
@@ -953,7 +966,7 @@ const generateNAT00085 = async (studentIds: string[]): Promise<string> => {
     write(55, 40, surname); // Client last name (NO middle name field)
     write(95, 50, addr?.building ?? ""); // Address building/property name
     write(145, 30, addr?.unit ?? ""); // Address flat/unit details
-    write(175, 15, ((addr as any)?.streetNumber ?? "").toString().substring(0, 15)); // Address street number
+    write(175, 15, (addr?.streetNumber ?? "").toString().substring(0, 15)); // Address street number
     write(190, 70, streetName); // Address street name
     write(260, 22, postalBox); // Address postal delivery box
     write(282, 50, addr?.city ?? ""); // Address suburb/locality/town
@@ -1137,7 +1150,10 @@ const generateNAT00120 = async (
     .populate("qualificationId")
     .lean();
 
-  await ClassModel.populate(classes, [{ path: "classDetails.location", model: "Location" }]);
+  await ClassModel.populate(classes, [
+    { path: "classDetails.location", model: "Location" },
+    { path: "deliveryLocationId", model: "DeliveryLocation" }
+  ]);
 
   const lines: string[] = [];
   const studentIds = new Set<string>();
@@ -1152,33 +1168,60 @@ const generateNAT00120 = async (
   // Key format: "{rtoId}|{clientId}|{unitCode}|{qualCode}|{startDateDDMMYYYY}"
   const seenRecords = new Set<string>();
 
+  // R-05: Precompute first enrollment date per (studentId, qualificationId) to derive commencing code.
+  // A student gets "3" (commencing) on their earliest class for a qual; "4" (continuing) on subsequent ones.
+  const studentQualFirstDate = new Map<string, number>();
+  for (const cls of classes) {
+    const qualId = (cls.qualificationId as any)?._id?.toString() ?? "";
+    const clsStart = new Date(cls.classDetails?.startDate).getTime();
+    for (const enr of cls.enrollments ?? []) {
+      const key = `${enr.studentInfo?.id}:${qualId}`;
+      const existing = studentQualFirstDate.get(key);
+      if (!existing || clsStart < existing) studentQualFirstDate.set(key, clsStart);
+    }
+  }
+
   for (const cls of classes) {
     if (cls.reportingDetails?.doNotReport) continue;
 
     const qual = cls.qualificationId as any;
-    const loc = cls.classDetails?.location as any;
+    // Prefer new DeliveryLocation (R-15) over old Location model when available
+    const delivLoc = (cls as any).deliveryLocationId as any;
+    const legacyLoc = cls.classDetails?.location as any;
 
-    // FIX (CRITICAL): Remove DEFAULT001 fallback — throw if location missing
-    if (!loc || !loc.locationId) {
+    let locationId: string;
+    if (delivLoc && delivLoc.locationIdentifier) {
+      locationId = delivLoc.locationIdentifier;
+      if (!locationMap.has(locationId)) {
+        locationMap.set(locationId, {
+          locationId: delivLoc.locationIdentifier,
+          name: delivLoc.name ?? "",
+          city: delivLoc.city,
+          postcode: delivLoc.postcode,
+          state: delivLoc.state
+        });
+      }
+    } else if (legacyLoc && legacyLoc.locationId) {
+      locationId = legacyLoc.locationId;
+      if (!locationMap.has(locationId)) {
+        locationMap.set(locationId, {
+          locationId: legacyLoc.locationId,
+          name: legacyLoc.addressLine ?? "",
+          city: legacyLoc.city,
+          postcode: legacyLoc.postcode,
+          state: legacyLoc.state
+        });
+      }
+    } else {
       throw new AppError(
         httpStatus.UNPROCESSABLE_ENTITY,
         "MISSING_LOCATION",
         `Class "${(cls as any)._id}" has no valid delivery location. ` +
-          `Every class must have a location with a locationId before AVETMISS reporting (Rule #4011).`
+          `Every class must have a delivery location or legacy location before AVETMISS reporting (Rule #4011).`
       );
     }
 
-    const locationId: string = loc.locationId;
-
-    if (!locationMap.has(locationId)) {
-      locationMap.set(locationId, {
-        locationId: loc.locationId,
-        name: loc.addressLine ?? "",
-        city: loc.city,
-        postcode: loc.postcode,
-        state: loc.state
-      });
-    }
+    const loc = locationMap.get(locationId)!;
 
     // FIX (HIGH): default from "30" (overseas) to "20" (fee-for-service domestic)
     const fundNational = getFundingSourceNationalCode(cls.fundDetails?.fundingSourceNational);
@@ -1238,7 +1281,9 @@ const generateNAT00120 = async (
 
         unitCodes.add(unit.code);
 
-        const student = await StudentModel.findById(enrollment.studentInfo.id).select("avetmissId");
+        const student = await StudentModel.findById(enrollment.studentInfo.id).select(
+          "avetmissId doNotReportAvetmiss fundingSourceNational isApprentice"
+        );
         const clientId = (student?.avetmissId ?? "").trim();
         if (!clientId) {
           console.warn(
@@ -1246,6 +1291,9 @@ const generateNAT00120 = async (
           );
           continue;
         }
+
+        // R-11: Per-student AVETMISS opt-out
+        if ((student as any)?.doNotReportAvetmiss) continue;
 
         // FIX (CRITICAL — Rule #3252 / #3251): getOutcomeCode now throws for unknown codes
         let outcomeCode = getOutcomeCode(unit.statusOfCompletion);
@@ -1304,6 +1352,24 @@ const generateNAT00120 = async (
         //   for (let i = 0; i < len; i++) buf[pos - 1 + i] = str[i];
         // };
 
+        // R-06: Student-level fundingSourceNational overrides class default
+        const studentFundRaw = (student as any)?.fundingSourceNational;
+        const effectiveFundNational = studentFundRaw
+          ? getFundingSourceNationalCode(studentFundRaw)
+          : fundNational;
+
+        // R-05: Commencing program code — "3"=commencing, "4"=continuing, "8"=UoC/SOA only
+        // Explicit override takes precedence; blank = auto-derive
+        const qualId = (qual as any)?._id?.toString() ?? "";
+        const firstDateForStudentQual = studentQualFirstDate.get(`${enrollment.studentInfo.id}:${qualId}`);
+        const thisClassStart = new Date(cls.classDetails?.startDate).getTime();
+        const overrideCode = ((enrollment as any).commencingProgramOverride ?? "").trim();
+        const commencingCode = overrideCode
+          ? overrideCode
+          : firstDateForStudentQual === thisClassStart
+            ? "3" // first time in this qualification
+            : "4"; // continuing (enrolled in another class for same qual earlier)
+
         // ── NAT00120 field layout per ACT AVETMISS Data Standard docx ──────────
         write(1, 10, padA(rtoId, 10)); // Pos   1–10 : Training org identifier
         write(11, 10, padA(locationId, 10)); // Pos  11–20 : Location identifier
@@ -1314,19 +1380,28 @@ const generateNAT00120 = async (
         write(61, 8, formatDate(activityEnd)); // Pos  61–68 : Activity end date
         write(69, 3, padA(deliveryMode, 3)); // Pos  69–71 : Delivery mode identifier (3 chars)
         write(72, 2, padA(outcomeCode, 2)); // Pos  72–73 : Outcome identifier — national
-        write(74, 2, padA(fundNational, 2)); // Pos  74–75 : Funding source — national
-        write(76, 1, padA("8", 1)); // Pos  76    : Commencing program identifier ("8" = UoC only; set per qual if known)
-        write(77, 10, padA("", 10)); // Pos  77–86 : Training contract identifier (blank)
-        write(87, 10, padA("", 10)); // Pos  87–96 : Client identifier — apprenticeships (blank)
-        write(97, 2, padA(getStudyReasonCode(enrollment.studyReason), 2)); // Pos 97–98: Study reason
+        write(74, 2, padA(effectiveFundNational, 2)); // Pos  74–75 : Funding source — national (R-06 student-first)
+        write(76, 1, padA(commencingCode, 1)); // Pos  76    : Commencing program identifier (R-05 dynamic)
+        // R-19: Training contract + apprenticeship client identifier
+        // R-19: if student is apprentice but IDs missing, write @@@@@@@@@@ (10 chars) per spec
+        const isApprentice = (student as any)?.isApprentice === true;
+        const contractId = (enrollment as any).trainingContractId?.trim() ?? "";
+        const apprenticeClientId = (enrollment as any).apprenticeshipClientId?.trim() ?? "";
+        write(77, 10, padA(contractId || (isApprentice ? "@@@@@@@@@@" : ""), 10)); // Pos  77–86 : Training contract identifier
+        write(87, 10, padA(apprenticeClientId || (isApprentice ? "@@@@@@@@@@" : ""), 10)); // Pos  87–96 : Client identifier — apprenticeships
+        write(97, 2, padA(getStudyReasonCode(enrollment.studyReason), 2)); // Pos  97–98 : Study reason
         write(99, 1, padA(vetInSchools, 1)); // Pos  99    : VET in schools flag
-        write(100, 10, padA(fundNational === "13" ? specificFundingIdentifier : "", 10)); // Pos 100–109: Specific funding identifier
+        const enrollmentSFI = ((enrollment as any).specificFundingIdentifier ?? "").trim();
+        const effectiveSFI = enrollmentSFI || specificFundingIdentifier;
+        write(100, 10, padA(effectiveFundNational === "13" || effectiveFundNational === "15" ? effectiveSFI : "", 10)); // Pos 100–109: Specific funding identifier
         write(110, 2, padA("", 2)); // Pos 110–111: School type identifier (blank)
         // Pos 112–114: Outcome identifier — training organisation (optional, blank)
         write(112, 3, padA("", 3));
         // Pos 115–117: Funding source — state training authority (3 chars)
         write(115, 3, padA(fundState, 3));
-        // Remaining optional fields (pos 118+) left blank
+        // R-04: Principle delivery mode (I/E/W/N) at pos 158
+        const pdm = (cls.reportingDetails?.principleDeliveryMode ?? " ").trim();
+        write(158, 1, padA(["I", "E", "W", "N"].includes(pdm) ? pdm : " ", 1));
         lines.push(buf.join("").substring(0, 158) + "\n");
       }
     }
@@ -1412,9 +1487,8 @@ const generateNAT00130 = async (
       }
       seenCompletions.add(dedupKey);
 
-      const hasCert = !!enrollment.certificateId;
-      const issuedFlag = hasCert ? "Y" : "N"; // 1 char "Y"/"N" per spec
-      const issuedDate = hasCert ? formatDate(enrollment.certificateIssuedDate) : "        ";
+      const issuedFlag = (enrollment.issuedFlag ?? "N") === "Y" ? "Y" : "N"; // 1 char "Y"/"N" per spec
+      const issuedDate = issuedFlag === "Y" ? formatDate(enrollment.certificateIssuedDate) : "        ";
       const parchmentNumber = enrollment.certificateShortId ?? "";
 
       // Buffer covers national (39) + optional parchment fields (pos 40–72)
@@ -1470,6 +1544,20 @@ const generateAvetmissReport = async (
   const nat120Result = await generateNAT00120(organizationId, rtoId, startDate, endDate);
 
   const nat10 = await generateNAT00010(organizationId);
+
+  // Merge locationMap (from NAT00120 classes) with all active DeliveryLocations for this org
+  const activeDelivLocs = await DeliveryLocationModel.find({ organizationId, isDeleted: { $ne: true } }).lean();
+  for (const dl of activeDelivLocs) {
+    if (!nat120Result.locationMap.has(dl.locationIdentifier)) {
+      nat120Result.locationMap.set(dl.locationIdentifier, {
+        locationId: dl.locationIdentifier,
+        name: dl.name,
+        city: dl.city,
+        postcode: dl.postcode,
+        state: dl.state
+      });
+    }
+  }
   const nat20 = await generateNAT00020(rtoId, Array.from(nat120Result.locationMap.values()));
   const nat30 = await generateNAT00030(Array.from(nat120Result.qualificationIds));
   const nat60 = await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
@@ -1490,7 +1578,7 @@ const generateAvetmissReport = async (
     archive.pipe(passThrough);
     archive.append(nat10, { name: "NAT00010.txt" });
     archive.append(nat20, { name: "NAT00020.txt" });
-    archive.append(nat30, { name: "NAT00030.txt" });
+    archive.append(nat30, { name: "NAT00030A.txt" });
     archive.append(nat60, { name: "NAT00060.txt" });
     archive.append(nat80, { name: "NAT00080.txt" });
     archive.append(nat85, { name: "NAT00085.txt" });
@@ -1686,6 +1774,15 @@ const importAvetmissReports = async (
     });
 
     results.push({ fileName: item.originalName, reportId });
+
+    // Parse NAT files from the ZIP and auto-create records (locations, quals, units, students, classes)
+    try {
+      const natSummary = await importFromNatZip(organizationId, item.buffer);
+      results[results.length - 1] = { ...results[results.length - 1], natImport: natSummary } as any;
+    } catch (natErr) {
+      // NAT parsing failure must not roll back the archive — log and continue
+      console.error(`[NAT Import] Failed for "${item.originalName}":`, natErr);
+    }
   }
 
   return { imported: results.length, results };

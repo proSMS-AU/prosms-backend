@@ -91,6 +91,10 @@ export class Unit {
 
   @Prop()
   fieldOfEducationId?: string;
+
+  // NAT00060 pos 119 — "Y" for VET units, "N" for non-vocational modules
+  @Prop({ type: String, default: "Y", enum: ["Y", "N"] })
+  vetFlag?: string;
 }
 
 export const UnitModel = getModelForClass(Unit);

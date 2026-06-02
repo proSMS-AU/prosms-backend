@@ -28,7 +28,7 @@ export default {
   db: {
     uri: ""
   },
-  sendgrid: {
+  resend: {
     apiKey: "",
     fromEmail: "",
     fromName: ""

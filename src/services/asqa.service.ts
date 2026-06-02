@@ -643,8 +643,16 @@ const buildDeliveryDataSheet = (
     };
   });
 
-  // ── Table A data rows ─────────────────────────────────────────────────────
-  for (const cls of classes) {
+  // E-05: split by programType. Default (unset) is treated as FULL_QUAL for Table A.
+  const fullQualClasses = classes.filter(
+    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && (cls as any).classDetails?.programType !== "SOA"
+  );
+  const soaClasses = classes.filter(
+    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && (cls as any).classDetails?.programType === "SOA"
+  );
+
+  // ── Table A data rows — full qualifications/accredited courses ────────────
+  for (const cls of fullQualClasses) {
     const qual = cls.qualificationId as any;
 
     const enrollmentsInRange = (cls.enrollments || []).filter((e: any) => {
@@ -749,10 +757,10 @@ const buildDeliveryDataSheet = (
     };
   });
 
-  // ── Table B data: aggregate units by unit code ────────────────────────────
+  // ── Table B data: aggregate units by unit code (SOA classes only) ─────────
   const unitMap = new Map<string, UnitAgg>();
 
-  for (const cls of classes) {
+  for (const cls of soaClasses) {
     const locs = resolveLocations(cls);
     for (const enrollment of cls.enrollments || []) {
       const enrollDate = new Date(enrollment.enrollmentDate);
@@ -888,6 +896,9 @@ const buildStudentSurveySheet = (wb: ExcelJS.Workbook, params: ASQAReportParams,
   const studentMap = new Map<string, SurveyEntry>();
 
   for (const cls of classes) {
+    // E-05: skip classes opted out of ASQA reporting
+    if ((cls as any).reportingDetails?.doNotReportAsqa) continue;
+
     const qual = cls.qualificationId as any;
     for (const enrollment of cls.enrollments || []) {
       const enrollDate = new Date(enrollment.enrollmentDate);
@@ -1041,6 +1052,9 @@ const buildEnrollmentCompletionSheet = async (
   const COMPLETED_STATUSES = new Set(ENROLLED_UNIT_COMPLETED_STATUSES);
 
   for (const cls of classes) {
+    // E-05: skip classes opted out of ASQA reporting
+    if ((cls as any).reportingDetails?.doNotReportAsqa) continue;
+
     const qual = cls.qualificationId as any;
     const qualCodeTitle = qual ? `${qual.code} - ${qual.title}` : "";
 
@@ -1170,6 +1184,14 @@ const generateASQAReport = async (params: ASQAReportParams): Promise<{ buffer: B
     throw new AppError(httpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_FAILED", "Failed to upload ASQA report to storage");
   }
 
+  // R-02: save light snapshot — class IDs + student count used in report generation
+  const snapshotData = {
+    classIds: (classes as any[]).map((c) => c._id?.toString()),
+    classCount: (classes as any[]).length,
+    studentCount: studentIds.size,
+    generatedAt: new Date().toISOString()
+  };
+
   await ASQAReportModel.create({
     title,
     organizationId: params.organizationId,
@@ -1178,7 +1200,8 @@ const generateASQAReport = async (params: ASQAReportParams): Promise<{ buffer: B
     startDate: params.startDate,
     endDate: params.endDate,
     generatedBy: params.generatedBy,
-    reportKey: uploadResult.key!
+    reportKey: uploadResult.key!,
+    snapshotData
   });
 
   return { buffer: excelBuffer, fileName };

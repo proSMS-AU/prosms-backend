@@ -4,6 +4,7 @@ import { AppError } from "../utils/appError";
 import { jwtProvider } from "../utils/jwtProvider";
 import argon2 from "argon2";
 import jwt from "jsonwebtoken";
+import config from "config";
 
 // login service
 const login = async (email: string, password: string) => {
@@ -19,12 +20,28 @@ const login = async (email: string, password: string) => {
     throw new AppError(httpStatus.UNAUTHORIZED, PASSWORD_INCORRECT_ERROR.code, PASSWORD_INCORRECT_ERROR.message);
   }
 
+  // Check if 2FA is enabled — return temp token instead of full session
+  // twoFaEnabled is the master switch; individual method flags are irrelevant when it is false
+  const twoFa = (user as any).twoFactorAuth;
+  if (twoFa?.twoFaEnabled && (twoFa?.enabled || twoFa?.emailOtpEnabled)) {
+    const tempToken = jwt.sign(
+      { userId: String(user._id), purpose: "2fa_gate" },
+      (config as any).get("server.accessTokenSecret") as string,
+      { expiresIn: "10m" }
+    );
+    const methods: string[] = [];
+    if (twoFa.enabled) methods.push("totp");
+    if (twoFa.emailOtpEnabled) methods.push("email");
+    return { status: "2fa_required" as const, tempToken, methods };
+  }
+
   // Generate tokens
   const { accessToken, refreshToken } = jwtProvider(user);
 
   const userWithoutPassword = user.toJSON();
 
   return {
+    status: "ok" as const,
     user: userWithoutPassword,
     accessToken,
     refreshToken
