@@ -20,7 +20,7 @@ router.patch("/:id", asyncWrapper(organizationControllers.updateOrganizationHand
 
 router.post(
   "/:orgId/import-nat",
-  natUpload.fields([{ name: "nat00080", maxCount: 1 }, { name: "nat00085", maxCount: 1 }]),
+  natUpload.fields([{ name: "zip", maxCount: 1 }]),
   asyncWrapper(NatImportController.importNatHandler)
 );
 

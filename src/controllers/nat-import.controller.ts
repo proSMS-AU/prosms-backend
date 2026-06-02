@@ -15,13 +15,16 @@ const importNatHandler = async (req: Request, res: Response) => {
   if (!zipFile) {
     throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "ZIP file is required");
   }
+  if (!zipFile.originalname.toLowerCase().endsWith(".zip")) {
+    throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "Uploaded file must be a .zip archive");
+  }
 
   const result = await importFromNatZip(organizationId, zipFile.buffer);
 
   SendSuccessResponse.created({
     res,
     message: `NAT import complete: ${result.students.created} students, ${result.classes.created} classes created`,
-    data: result,
+    data: result
   });
 };
 
