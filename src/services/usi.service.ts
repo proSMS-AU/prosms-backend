@@ -5,6 +5,10 @@ import { BAD_REQUEST, DATA_NOT_FOUND, httpStatus, UNEXPECTED_ERROR } from "../co
 import { OrganizationModel } from "../model/organization.model";
 import { SSIDRequestModel } from "../model/ssid-request.model";
 import { StudentModel } from "../model/student.model";
+import { sendEmail } from "../utils/sendEmail";
+
+const SUPER_ADMIN_EMAIL = "prosms.au@gmail.com";
+const CLIENT_BASE_URL = config.get<string>("server.clientUrl") ?? "https://app.prosms.com.au";
 
 interface USIEnvConfig {
   apiBaseURL: string;
@@ -39,6 +43,15 @@ const requestForSSIDByRTO = async (organizationId: string) => {
     );
   }
 
+  // S6: dedupe — return the existing pending/approved request rather than creating another row
+  const existing = await SSIDRequestModel.findOne({
+    organizationId: organization._id,
+    status: { $in: ["pending", "approved"] }
+  });
+  if (existing) {
+    return { success: true, status: existing.status, alreadyRequested: true };
+  }
+
   const request = await SSIDRequestModel.create({
     organizationId: organization._id.toString(),
     rtoId: organization.rtoId,
@@ -48,10 +61,26 @@ const requestForSSIDByRTO = async (organizationId: string) => {
     status: "pending"
   });
 
-  return {
-    success: true,
-    status: request.status
-  };
+  // S1: notify Super Admin by email
+  try {
+    await sendEmail({
+      to: SUPER_ADMIN_EMAIL,
+      subject: `New SSID Request — ${organization.name}`,
+      templateName: "ssid-request-notify-sa",
+      templateData: {
+        organizationName: organization.name,
+        rtoId: organization.rtoId,
+        abn: organization.ABN,
+        requestDate: new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney" }),
+        dashboardUrl: `${CLIENT_BASE_URL}/super-admin/dashboard/ssid/manage`
+      }
+    });
+  } catch (err) {
+    // Email failure must not break the request flow
+    console.error("[SSID] Failed to notify SA by email:", err);
+  }
+
+  return { success: true, status: request.status, alreadyRequested: false };
 };
 
 const getAllSSIDRequests = async () => {

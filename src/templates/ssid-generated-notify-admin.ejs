@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Your ProSMS SSID is Ready</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f4f4f5;font-family:sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+      <tr>
+        <td align="center">
+          <table width="100%" style="max-width:560px;background:#ffffff;border-radius:12px;padding:40px;border:1px solid #e4e4e7;">
+            <tr>
+              <td>
+                <h2 style="margin:0 0 8px;font-size:20px;color:#18181b;">Your ProSMS SSID is Ready</h2>
+                <p style="margin:0 0 24px;font-size:14px;color:#71717a;">
+                  Hi <strong><%= organizationName %></strong>, your Software System ID (SSID) for ProSMS has been generated.
+                </p>
+
+                <!-- SSID Box -->
+                <div style="text-align:center;margin:28px 0;">
+                  <p style="margin:0 0 8px;font-size:12px;color:#71717a;text-transform:uppercase;letter-spacing:1px;">Your SSID</p>
+                  <span style="display:inline-block;font-size:28px;font-weight:700;letter-spacing:6px;color:#18181b;background:#f4f4f5;padding:14px 24px;border-radius:8px;font-family:monospace;">
+                    <%= ssid %>
+                  </span>
+                </div>
+
+                <h3 style="margin:28px 0 12px;font-size:15px;color:#18181b;">Next steps — verify in RAM</h3>
+                <ol style="margin:0 0 24px;padding-left:20px;font-size:14px;color:#3f3f46;line-height:2;">
+                  <li>Sign in to RAM at <a href="https://authorisationmanager.gov.au" style="color:#2563eb;">authorisationmanager.gov.au</a></li>
+                  <li>Go to <strong>Manage authorisations</strong> → select your organisation.</li>
+                  <li>Under <strong>Machine credentials / Software providers</strong>, add ProSMS using the SSID above.</li>
+                  <li>Set the relationship status to <strong>Active</strong> and note the authorisation and expiry dates.</li>
+                  <li>Return to ProSMS → <strong>Settings → USI Configuration</strong>, confirm the SSID (pre-filled) and enter your RAM dates.</li>
+                </ol>
+
+                <div style="text-align:center;margin:24px 0;">
+                  <a href="<%= configUrl %>" style="display:inline-block;background:#18181b;color:#ffffff;font-size:14px;font-weight:600;padding:12px 28px;border-radius:8px;text-decoration:none;">
+                    Go to USI Configuration
+                  </a>
+                </div>
+
+                <p style="margin:0;font-size:12px;color:#a1a1aa;text-align:center;">
+                  Once configured, you can begin verifying student USIs in ProSMS.<br />
+                  Need help? Contact ProSMS support.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
