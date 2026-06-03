@@ -29,13 +29,11 @@ import { logger } from "../logger";
 const run = async () => {
   const isDryRun = !process.argv.includes("--commit");
   await dbConnection();
-  logger.info(
-    `[Migration 002] Starting... (${isDryRun ? "DRY RUN — pass --commit to write" : "COMMIT MODE"})`
-  );
+  logger.info(`[Migration 002] Starting... (${isDryRun ? "DRY RUN — pass --commit to write" : "COMMIT MODE"})`);
 
   // Load all classes that have a class-level fundingSourceNational
   const classes = await ClassModel.find({
-    "fundDetails.fundingSourceNational": { $exists: true, $ne: "" },
+    "fundDetails.fundingSourceNational": { $exists: true, $ne: "" }
   }).lean();
 
   // Build a map: studentId → Set of fundingSourceNational values seen across their classes

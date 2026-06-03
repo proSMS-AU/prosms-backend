@@ -34,9 +34,7 @@ import { logger } from "../logger";
 const run = async () => {
   const isDryRun = !process.argv.includes("--commit");
   await dbConnection();
-  logger.info(
-    `[Migration 003] Starting... (${isDryRun ? "DRY RUN — pass --commit to write" : "COMMIT MODE"})`
-  );
+  logger.info(`[Migration 003] Starting... (${isDryRun ? "DRY RUN — pass --commit to write" : "COMMIT MODE"})`);
 
   // Use native driver to find students where the field exists, bypassing Mongoose strict
   const db = mongoose.connection.db!;
@@ -65,7 +63,7 @@ const run = async () => {
 
     // Find all classes this student is enrolled in
     const enrolledClasses = await ClassModel.find({
-      "enrollments.studentInfo.id": studentId,
+      "enrollments.studentInfo.id": studentId
     })
       .select("qualificationId")
       .lean();
@@ -76,9 +74,7 @@ const run = async () => {
       continue;
     }
 
-    const qualIds = [
-      ...new Set(enrolledClasses.map((c) => c.qualificationId?.toString()).filter(Boolean)),
-    ];
+    const qualIds = [...new Set(enrolledClasses.map((c) => c.qualificationId?.toString()).filter(Boolean))];
 
     if (qualIds.length === 0) {
       logger.warn(`  [skip] student ${studentId}: enrolled classes have no qualificationId`);
@@ -110,10 +106,7 @@ const run = async () => {
 
     // Remove the now-migrated field from the student document
     if (!isDryRun) {
-      await studentsCol.updateOne(
-        { _id: student._id },
-        { $unset: { "participantsIdentifiers.oscaIdentifier": "" } }
-      );
+      await studentsCol.updateOne({ _id: student._id }, { $unset: { "participantsIdentifiers.oscaIdentifier": "" } });
       studentsCleaned++;
     }
   }
