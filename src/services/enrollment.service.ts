@@ -91,7 +91,8 @@ const addEnrollment = async (enrollmentData: EnrollmentT) => {
     trainingContractId: (enrollmentData as any).trainingContractId ?? null,
     apprenticeshipClientId: (enrollmentData as any).apprenticeshipClientId ?? null,
     commencingProgramOverride: (enrollmentData as any).commencingProgramOverride ?? "",
-    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? ""
+    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? "",
+    ...((enrollmentData as any).enrollmentType ? { enrollmentType: (enrollmentData as any).enrollmentType } : {})
   };
 
   classData.enrollments.push(prepareData);
@@ -184,7 +185,8 @@ const addEnrollmentWithNotify = async (enrollmentData: EnrollmentWithNotifyT) =>
     trainingContractId: (enrollmentData as any).trainingContractId ?? null,
     apprenticeshipClientId: (enrollmentData as any).apprenticeshipClientId ?? null,
     commencingProgramOverride: (enrollmentData as any).commencingProgramOverride ?? "",
-    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? ""
+    specificFundingIdentifier: (enrollmentData as any).specificFundingIdentifier ?? "",
+    ...((enrollmentData as any).enrollmentType ? { enrollmentType: (enrollmentData as any).enrollmentType } : {})
   };
 
   classData.enrollments.push(prepareData);
