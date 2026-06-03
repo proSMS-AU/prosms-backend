@@ -34,7 +34,7 @@ const generateAutoInvoiceHandler = async (req: Request, res: Response) => {
     studentSnapshot,
     classIds,
     createdBy,
-    req.user?.organizationId as string  // auto invoice is always org-scoped (admin only)
+    req.user?.organizationId as string // auto invoice is always org-scoped (admin only)
   );
 
   SendSuccessResponse.created({

@@ -104,7 +104,7 @@ const addEnrollment = async (enrollmentData: EnrollmentT) => {
     entityId: String(classData._id),
     entityLabel: `${studentData.personalInfo.givenName} ${studentData.personalInfo.surname ?? ""}`.trim(),
     action: "enroll",
-    description: `Enrolled in class "${classData.classDetails.classTitle}"`,
+    description: `Enrolled in class "${classData.classDetails.classTitle}"`
   });
 
   return classData;

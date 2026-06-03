@@ -590,10 +590,7 @@ const generateNAT00030 = async (qualificationIds: string[]): Promise<string> => 
             `writing "0000". This will trigger NCVER warning #3401.`
         );
       }
-      const base =
-        padA(qual.code, 10) +
-        padA(qual.title, 100) +
-        padN(qual.nominalHours ?? 0, 4);
+      const base = padA(qual.code, 10) + padA(qual.title, 100) + padN(qual.nominalHours ?? 0, 4);
       // Pad to pos 123 (9 reserved blank chars), then write OSCA at pos 124–129
       const line = base.padEnd(123, " ") + padA(qual.oscaIdentifier ?? "", 6).padEnd(7, " ");
       return `${line}\n`;
@@ -812,8 +809,8 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
     if (DOMESTIC_CODES.includes(studentFundingCode) && postcode === "OSPC") {
       console.warn(
         `[AVETMISS] NAT00080: Student "${avetmissId}" has domestic funding code "${studentFundingCode}" ` +
-        `but postcode is OSPC — this is a data error. Domestic students must have a real AU address. ` +
-        `Reporting OSPC as-is; please correct the student record.`
+          `but postcode is OSPC — this is a data error. Domestic students must have a real AU address. ` +
+          `Reporting OSPC as-is; please correct the student record.`
       );
     }
 
@@ -1374,9 +1371,7 @@ const generateNAT00120 = async (
 
         // R-06: Student-level fundingSourceNational overrides class default
         const studentFundRaw = (student as any)?.fundingSourceNational;
-        const effectiveFundNational = studentFundRaw
-          ? getFundingSourceNationalCode(studentFundRaw)
-          : fundNational;
+        const effectiveFundNational = studentFundRaw ? getFundingSourceNationalCode(studentFundRaw) : fundNational;
 
         // R-05: Commencing program code — "3"=commencing, "4"=continuing, "8"=UoC/SOA only
         // Explicit override takes precedence; blank = auto-derive
