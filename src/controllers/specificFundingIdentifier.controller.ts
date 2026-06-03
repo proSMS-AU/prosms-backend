@@ -13,7 +13,11 @@ const createHandler = async (req: Request, res: Response) => {
 };
 
 const updateHandler = async (req: Request, res: Response) => {
-  const data = await SpecificFundingIdentifierService.updateSFI(req.params.id, req.user!.organizationId as string, req.body);
+  const data = await SpecificFundingIdentifierService.updateSFI(
+    req.params.id,
+    req.user!.organizationId as string,
+    req.body
+  );
   SendSuccessResponse.updated({ res, message: "SFI updated", data });
 };
 
@@ -26,5 +30,5 @@ export const SpecificFundingIdentifierControllers = {
   listHandler,
   createHandler,
   updateHandler,
-  deleteHandler,
+  deleteHandler
 };

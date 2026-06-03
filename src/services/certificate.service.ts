@@ -906,10 +906,7 @@ const generateCertificatesForStudent = async (
 
   for (const classId of classIds) {
     try {
-      await generateCertificates(
-        { classId, templateId, students: [{ id: studentId }] },
-        organizationId
-      );
+      await generateCertificates({ classId, templateId, students: [{ id: studentId }] }, organizationId);
       results.push({ classId, success: true });
     } catch (err: unknown) {
       const msg = err instanceof AppError ? err.message : "Unknown error";

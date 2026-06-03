@@ -35,5 +35,5 @@ export const SpecificFundingIdentifierService = {
   createSFI,
   listSFIs,
   updateSFI,
-  deleteSFI,
+  deleteSFI
 };

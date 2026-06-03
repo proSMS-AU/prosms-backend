@@ -47,7 +47,6 @@ function base32Decode(encoded: string): Buffer {
   const clean = encoded.toUpperCase().replace(/=+$/, "");
   let bits = 0;
   let value = 0;
-  let output = 0;
   const bytes: number[] = [];
   for (const char of clean) {
     const idx = BASE32_CHARS.indexOf(char);
@@ -57,7 +56,6 @@ function base32Decode(encoded: string): Buffer {
     if (bits >= 8) {
       bytes.push((value >>> (bits - 8)) & 0xff);
       bits -= 8;
-      output++;
     }
   }
   return Buffer.from(bytes);
@@ -72,7 +70,8 @@ export const generateTotpToken = (secret: string, window = 0): string => {
   hmac.update(counterBuf);
   const digest = hmac.digest();
   const offset = digest[digest.length - 1] & 0x0f;
-  const code = ((digest[offset] & 0x7f) << 24) |
+  const code =
+    ((digest[offset] & 0x7f) << 24) |
     ((digest[offset + 1] & 0xff) << 16) |
     ((digest[offset + 2] & 0xff) << 8) |
     (digest[offset + 3] & 0xff);

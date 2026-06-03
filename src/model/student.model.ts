@@ -95,7 +95,6 @@ class ParticipantsIdentifiers {
 
   @Prop()
   saceStudentId?: string;
-
 }
 
 class EmploymentDetails {

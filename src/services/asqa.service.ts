@@ -772,16 +772,28 @@ const buildDeliveryDataSheet = (
     for (const unit of enrollment.unitsOfCompetency || []) {
       if (!unitMap.has(unit.code)) {
         unitMap.set(unit.code, {
-          code: unit.code, title: unit.title, enrollmentCount: 0, issuedCount: 0,
-          locations: new Set(), fundingSources: new Set(), deliveryModes: new Set(),
-          hasPartnership: false, cohorts: new Set(), comments: new Set()
+          code: unit.code,
+          title: unit.title,
+          enrollmentCount: 0,
+          issuedCount: 0,
+          locations: new Set(),
+          fundingSources: new Set(),
+          deliveryModes: new Set(),
+          hasPartnership: false,
+          cohorts: new Set(),
+          comments: new Set()
         });
       }
       const agg = unitMap.get(unit.code)!;
-      if (inRange) { agg.enrollmentCount++; if (unit.statusOfCompletion === "C") agg.issuedCount++; }
+      if (inRange) {
+        agg.enrollmentCount++;
+        if (unit.statusOfCompletion === "C") agg.issuedCount++;
+      }
       locs.forEach((l) => agg.locations.add(l));
-      if (cls.fundDetails?.principleFundingSourceAsqa) agg.fundingSources.add(cls.fundDetails.principleFundingSourceAsqa);
-      if (cls.reportingDetails?.principleDeliveryMode) agg.deliveryModes.add(cls.reportingDetails.principleDeliveryMode);
+      if (cls.fundDetails?.principleFundingSourceAsqa)
+        agg.fundingSources.add(cls.fundDetails.principleFundingSourceAsqa);
+      if (cls.reportingDetails?.principleDeliveryMode)
+        agg.deliveryModes.add(cls.reportingDetails.principleDeliveryMode);
       if (cls.reportingDetails?.partnership) agg.hasPartnership = true;
       if (cls.reportingDetails?.principalClientCohort) agg.cohorts.add(cls.reportingDetails.principalClientCohort);
       if (cls.reportingDetails?.comment) agg.comments.add(cls.reportingDetails.comment);

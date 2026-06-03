@@ -10,12 +10,12 @@ const getActivityLogHandler = async (req: Request, res: Response) => {
     entityType,
     entityId,
     limit: limit ? parseInt(limit) : 50,
-    page: page ? parseInt(page) : 1,
+    page: page ? parseInt(page) : 1
   });
   SendSuccessResponse.success({
     res,
     message: "Activity log retrieved",
-    data: result,
+    data: result
   });
 };
 

@@ -5,7 +5,7 @@ import { ModelOptions, Prop, getModelForClass, Index } from "@typegoose/typegoos
   schemaOptions: {
     collection: "otp_codes",
     timestamps: true,
-    versionKey: false,
+    versionKey: false
   }
 })
 export class OtpCode {

@@ -30,17 +30,23 @@ const verifyAndAddDevice = async (userId: string, secret: string, token: string,
   await AuthModel.findByIdAndUpdate(userId, {
     $set: {
       "twoFactorAuth.enabled": true,
-      "twoFactorAuth.devices": devices,
-    },
+      "twoFactorAuth.devices": devices
+    }
   });
 
-  const addedAt = new Date().toLocaleString("en-AU", { timeZone: "Australia/Sydney", dateStyle: "medium", timeStyle: "short" });
-  emailService.sendEmail({
-    to: user.email,
-    subject: "New authenticator device added to your ProSMS account",
-    templateName: "new-device-added",
-    templateData: { name: user.name, deviceLabel: label, addedAt }
-  }).catch(() => {});
+  const addedAt = new Date().toLocaleString("en-AU", {
+    timeZone: "Australia/Sydney",
+    dateStyle: "medium",
+    timeStyle: "short"
+  });
+  emailService
+    .sendEmail({
+      to: user.email,
+      subject: "New authenticator device added to your ProSMS account",
+      templateName: "new-device-added",
+      templateData: { name: user.name, deviceLabel: label, addedAt }
+    })
+    .catch(() => {});
 
   return { added: true, label };
 };
@@ -60,8 +66,8 @@ const removeDevice = async (userId: string, deviceIndex: number) => {
   await AuthModel.findByIdAndUpdate(userId, {
     $set: {
       "twoFactorAuth.devices": devices,
-      "twoFactorAuth.enabled": enabled,
-    },
+      "twoFactorAuth.enabled": enabled
+    }
   });
 
   return { removed: true, remainingDevices: devices.length };
@@ -74,14 +80,14 @@ const getDevices = async (userId: string) => {
   const devices = (user.twoFactorAuth?.devices ?? []).map((d, index) => ({
     index,
     label: d.label,
-    addedAt: d.addedAt,
+    addedAt: d.addedAt
   }));
 
   return {
     enabled: user.twoFactorAuth?.enabled ?? false,
     twoFaEnabled: user.twoFactorAuth?.twoFaEnabled ?? false,
     emailOtpEnabled: true, // email OTP is always active — not toggleable
-    devices,
+    devices
   };
 };
 
@@ -106,5 +112,5 @@ export const TotpService = {
   verifyAndAddDevice,
   removeDevice,
   getDevices,
-  verifyToken,
+  verifyToken
 };

@@ -55,7 +55,11 @@ const getOrganizationStats = async () => {
 };
 
 const updateOrganization = async (id: string, data: Record<string, unknown>) => {
-  const organization = await OrganizationModel.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true });
+  const organization = await OrganizationModel.findByIdAndUpdate(
+    id,
+    { $set: data },
+    { new: true, runValidators: true }
+  );
   if (!organization) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
   }

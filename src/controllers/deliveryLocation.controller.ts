@@ -3,10 +3,7 @@ import { SendSuccessResponse } from "../utils";
 import { DeliveryLocationService } from "../services/deliveryLocation.service";
 
 const createHandler = async (req: Request, res: Response) => {
-  const data = await DeliveryLocationService.createDeliveryLocation(
-    req.user?.organizationId as string,
-    req.body
-  );
+  const data = await DeliveryLocationService.createDeliveryLocation(req.user?.organizationId as string, req.body);
   SendSuccessResponse.created({ res, message: "Delivery location created", data });
 };
 
@@ -25,10 +22,7 @@ const updateHandler = async (req: Request, res: Response) => {
 };
 
 const deleteHandler = async (req: Request, res: Response) => {
-  await DeliveryLocationService.softDeleteDeliveryLocation(
-    req.params.id,
-    req.user?.organizationId as string
-  );
+  await DeliveryLocationService.softDeleteDeliveryLocation(req.params.id, req.user?.organizationId as string);
   SendSuccessResponse.deleted({ res, message: "Delivery location deleted", data: null });
 };
 

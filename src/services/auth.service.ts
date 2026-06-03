@@ -22,10 +22,12 @@ const login = async (email: string, password: string) => {
 
   // Check if 2FA is enabled — return temp token instead of full session
   // twoFaEnabled is the master switch; individual method flags are irrelevant when it is false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const twoFa = (user as any).twoFactorAuth;
   if (twoFa?.twoFaEnabled && (twoFa?.enabled || twoFa?.emailOtpEnabled)) {
     const tempToken = jwt.sign(
       { userId: String(user._id), purpose: "2fa_gate" },
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (config as any).get("server.accessTokenSecret") as string,
       { expiresIn: "10m" }
     );

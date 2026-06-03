@@ -443,7 +443,7 @@ const deleteStudent = async (studentId: string, actorUserId?: string) => {
     entityType: "student",
     entityId: String(student._id),
     entityLabel: `${student.personalInfo?.givenName ?? ""} ${student.personalInfo?.surname ?? ""}`.trim(),
-    action: "delete",
+    action: "delete"
   });
 };
 
@@ -487,7 +487,7 @@ const restoreStudent = async (studentId: string, organizationId: string) => {
     entityType: "student",
     entityId: String(student._id),
     entityLabel: `${student.personalInfo?.givenName ?? ""} ${student.personalInfo?.surname ?? ""}`.trim(),
-    action: "restore",
+    action: "restore"
   });
 
   return student;

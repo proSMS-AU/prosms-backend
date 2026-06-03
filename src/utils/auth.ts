@@ -105,7 +105,6 @@ import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { getMongoClient, getMongoDb } from "./db-connection";
 import config from "config";
 import { emailService } from "./sendEmail";
-import { logger } from "./logger";
 
 let authInstance: ReturnType<typeof betterAuth> | null = null;
 
@@ -160,10 +159,13 @@ export function initializeAuth() {
           create: {
             after: async (session) => {
               try {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const baUser = await db!.collection("user").findOne({ id: (session as any).userId });
                 if (!baUser?.email) return;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const ua = (session as any).userAgent as string | undefined;
                 const device = parseDeviceFromUA(ua);
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const ip = (session as any).ipAddress as string | undefined;
                 const time = new Date().toLocaleString("en-AU", {
                   timeZone: "Australia/Sydney",

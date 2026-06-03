@@ -98,8 +98,8 @@ const setRequestUser = async (req: Request, session: any) => {
         name: (session.user.name as string) || email,
         email,
         // @ts-ignore
-        organizationId: (session.user.organizationId as string) || "unassigned",
-      },
+        organizationId: (session.user.organizationId as string) || "unassigned"
+      }
     },
     { upsert: true, new: true }
   );

@@ -7,7 +7,6 @@ import { TotpService } from "../services/totp.service";
 import { EmailOtpService } from "../services/emailOtp.service";
 import { AuthModel } from "../model/auth.model";
 import { pendingOtpCaptures } from "../utils/auth";
-import { jwtProvider } from "../utils/jwtProvider";
 import jwt from "jsonwebtoken";
 import config from "config";
 
@@ -166,7 +165,10 @@ const sendLoginEmailOtpHandler = async (req: Request, res: Response, next: NextF
 
     let payload: { userId: string; purpose: string };
     try {
-      payload = jwt.verify(tempToken, config.get("server.accessTokenSecret") as string) as { userId: string; purpose: string };
+      payload = jwt.verify(tempToken, config.get("server.accessTokenSecret") as string) as {
+        userId: string;
+        purpose: string;
+      };
     } catch {
       throw new AppError(400, "INVALID_TEMP_TOKEN", "Temp token is invalid or expired");
     }
@@ -189,7 +191,10 @@ const validateTwoFactorHandler = async (req: Request, res: Response, next: NextF
 
     let payload: { userId: string; purpose: string };
     try {
-      payload = jwt.verify(tempToken, config.get("server.accessTokenSecret") as string) as { userId: string; purpose: string };
+      payload = jwt.verify(tempToken, config.get("server.accessTokenSecret") as string) as {
+        userId: string;
+        purpose: string;
+      };
     } catch (err) {
       if (err instanceof jwt.TokenExpiredError) {
         throw new AppError(401, "TEMP_TOKEN_EXPIRED", "Authenticator session expired.");

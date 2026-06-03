@@ -26,7 +26,11 @@ const sendOtp = async (userId: string, purpose: string) => {
   });
 
   if (recentCount >= MAX_OTP_PER_WINDOW) {
-    throw new AppError(httpStatus.TOO_MANY_REQUESTS, "OTP_RATE_LIMITED", "Too many OTP requests. Please wait 15 minutes.");
+    throw new AppError(
+      httpStatus.TOO_MANY_REQUESTS,
+      "OTP_RATE_LIMITED",
+      "Too many OTP requests. Please wait 15 minutes."
+    );
   }
 
   const code = generateOtp();
@@ -38,7 +42,7 @@ const sendOtp = async (userId: string, purpose: string) => {
     to: user.email,
     subject: "Your ProSMS verification code",
     templateName: "otp-verification",
-    templateData: { otp: code, expiresInMinutes: 10 },
+    templateData: { otp: code, expiresInMinutes: 10 }
   });
 
   return { sent: true };

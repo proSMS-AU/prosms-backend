@@ -87,7 +87,9 @@ router.post("/verify-password", async (req: Request, res: Response) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, type: "sign-in" })
         });
-      } finally { /* never block login on fetch failure */ }
+      } finally {
+        /* never block login on fetch failure */
+      }
       const capturedOtp = pendingOtpCaptures.get(email) ?? "";
       pendingOtpCaptures.delete(email);
       return res.status(200).json({ status: "no_2fa", email, otp: capturedOtp });
@@ -131,13 +133,21 @@ router.post("/verify-password", async (req: Request, res: Response) => {
 });
 
 // Session check — used by Next.js middleware to verify custom JWT sessions
-router.get("/me", requireAuth, asyncWrapper(async (req: Request, res: Response) => {
-  const user = await AuthModel.findById(req.user?._id).lean();
-  if (!user) {
-    return SendErrorResponse.notFound({ res, message: "User not found", data: { clientError: { code: "USER_NOT_FOUND", message: "User not found" } } });
-  }
-  return SendSuccessResponse.success({ res, message: "User fetched", data: { user } });
-}));
+router.get(
+  "/me",
+  requireAuth,
+  asyncWrapper(async (req: Request, res: Response) => {
+    const user = await AuthModel.findById(req.user?._id).lean();
+    if (!user) {
+      return SendErrorResponse.notFound({
+        res,
+        message: "User not found",
+        data: { clientError: { code: "USER_NOT_FOUND", message: "User not found" } }
+      });
+    }
+    return SendSuccessResponse.success({ res, message: "User fetched", data: { user } });
+  })
+);
 
 // H.3: Send email OTP for login gate (no session — tempToken only)
 router.post("/2fa/send-login-otp", asyncWrapper(AuthController.sendLoginEmailOtpHandler));

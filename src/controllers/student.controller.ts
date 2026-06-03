@@ -95,10 +95,7 @@ const getUniqueCountriesHandler = async (req: Request, res: Response) => {
 
 // E-01 — All classes this student is enrolled in
 const getStudentEnrollmentsHandler = async (req: Request, res: Response) => {
-  const enrollments = await EnrollmentServices.getStudentEnrollments(
-    req.params.id,
-    req.user?.organizationId as string
-  );
+  const enrollments = await EnrollmentServices.getStudentEnrollments(req.params.id, req.user?.organizationId as string);
   SendSuccessResponse.success({
     res,
     message: "Student enrollments retrieved successfully",

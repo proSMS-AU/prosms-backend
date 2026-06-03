@@ -3,7 +3,15 @@ import mongoose from "mongoose";
 import { Organization } from "./organization.model";
 
 export type ActivityAction = "create" | "update" | "delete" | "restore" | "issue" | "void" | "enroll" | "unenroll";
-export type ActivityEntityType = "student" | "class" | "enrollment" | "certificate" | "invoice" | "trainer" | "qualification" | "template";
+export type ActivityEntityType =
+  | "student"
+  | "class"
+  | "enrollment"
+  | "certificate"
+  | "invoice"
+  | "trainer"
+  | "qualification"
+  | "template";
 
 @ModelOptions({
   schemaOptions: {

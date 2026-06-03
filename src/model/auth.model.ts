@@ -60,7 +60,11 @@ export class Auth {
   })
   organizationId: string;
 
-  @Prop({ type: () => TwoFactorAuth, _id: false, default: () => ({ enabled: false, devices: [], emailOtpEnabled: false }) })
+  @Prop({
+    type: () => TwoFactorAuth,
+    _id: false,
+    default: () => ({ enabled: false, devices: [], emailOtpEnabled: false })
+  })
   twoFactorAuth?: TwoFactorAuth;
 }
 export const AuthModel = getModelForClass(Auth);

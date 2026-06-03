@@ -24,6 +24,7 @@ const undoHandlers: Partial<Record<ActivityEntityType, UndoHandler>> = {
 
   // Enrollment and class undo require soft-delete support on those models (not yet implemented).
   // Register handlers here once isDeleted/deletedAt are added to ClassModel / embedded Enrollments.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   enrollment: async (_entityId, _action) => {
     throw new AppError(
       httpStatus.BAD_REQUEST,
@@ -32,6 +33,7 @@ const undoHandlers: Partial<Record<ActivityEntityType, UndoHandler>> = {
     );
   },
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   class: async (_entityId, _action) => {
     throw new AppError(
       httpStatus.BAD_REQUEST,
