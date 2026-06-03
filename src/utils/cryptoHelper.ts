@@ -80,7 +80,7 @@ export const generateTotpToken = (secret: string, window = 0): string => {
 
 export const verifyTotpToken = (token: string, secret: string): boolean => {
   // Check current window + 1 step drift each way
-  for (let w = -1; w <= 1; w++) {
+  for (let w = -1; w <= 1; w += 1) {
     if (generateTotpToken(secret, w) === token) return true;
   }
   return false;

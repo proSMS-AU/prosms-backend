@@ -717,6 +717,7 @@ const bulkEnrollStudents = async (
   };
 
   for (const studentId of studentIds) {
+    // eslint-disable-next-line no-await-in-loop
     const studentData = await StudentModel.findById(studentId);
 
     if (!studentData || studentData.isDeleted) {
@@ -793,7 +794,7 @@ const bulkUpdateDates = async (
         if (dates.unitEndDate) (unit as any).unitEndDate = new Date(dates.unitEndDate);
       }
     }
-    updatedCount++;
+    updatedCount += 1;
   }
 
   await classData.save();

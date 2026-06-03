@@ -1,4 +1,5 @@
 import { ActivityLogModel, ActivityAction, ActivityEntityType } from "../model/activity-log.model";
+import { logger } from "./logger";
 
 interface LogActivityOptions {
   organizationId: string;
@@ -16,7 +17,7 @@ export const logActivity = async (options: LogActivityOptions): Promise<void> =>
   try {
     await ActivityLogModel.create(options);
   } catch (err) {
-    // Non-blocking — log to console but don't throw
-    console.warn("[ActivityLog] Failed to write activity log:", err);
+    // Non-blocking — don't throw
+    logger.warn("[ActivityLog] Failed to write activity log:", err);
   }
 };

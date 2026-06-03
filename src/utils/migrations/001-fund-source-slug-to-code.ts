@@ -53,7 +53,7 @@ const run = async () => {
     if (slug && SLUG_TO_CODE[slug]) {
       logger.info(`  [fund] class ${cls._id}: "${slug}" → "${SLUG_TO_CODE[slug]}"`);
       cls.fundDetails.fundingSourceNational = SLUG_TO_CODE[slug];
-      fundFixed++;
+      fundFixed += 1;
       changed = true;
     }
 
@@ -62,10 +62,11 @@ const run = async () => {
     if (mode && DELIVERY_MODE_MAP[mode]) {
       logger.info(`  [mode] class ${cls._id}: "${mode}" → "${DELIVERY_MODE_MAP[mode]}"`);
       cls.reportingDetails.avetmissDeliveryMode = DELIVERY_MODE_MAP[mode];
-      modeFixed++;
+      modeFixed += 1;
       changed = true;
     }
 
+    // eslint-disable-next-line no-await-in-loop
     if (changed && !isDryRun) await cls.save();
   }
 

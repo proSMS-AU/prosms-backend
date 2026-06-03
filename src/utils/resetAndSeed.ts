@@ -30,10 +30,12 @@ const run = async (): Promise<void> => {
   for (const { name } of collections) {
     if (name.startsWith("system.")) continue;
     try {
+      // eslint-disable-next-line no-await-in-loop
       await db.collection(name).drop();
       logger.info(`[Reset]   dropped collection "${name}"`);
     } catch {
       // Fallback when the Atlas user can't drop: empty the collection instead
+      // eslint-disable-next-line no-await-in-loop
       const res = await db.collection(name).deleteMany({});
       logger.info(`[Reset]   could not drop "${name}", cleared ${res.deletedCount} docs instead`);
     }

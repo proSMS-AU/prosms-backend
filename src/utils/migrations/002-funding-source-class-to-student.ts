@@ -57,17 +57,18 @@ const run = async () => {
   let skippedNoValue = 0;
 
   for (const [studentId, values] of studentFundMap.entries()) {
+    // eslint-disable-next-line no-await-in-loop
     const student = await StudentModel.findById(studentId);
     if (!student) continue;
 
     // Already has a student-level value — skip
     if (student.fundingSourceNational) {
-      skippedAlreadySet++;
+      skippedAlreadySet += 1;
       continue;
     }
 
     if (values.size === 0) {
-      skippedNoValue++;
+      skippedNoValue += 1;
       continue;
     }
 
@@ -75,7 +76,7 @@ const run = async () => {
       logger.warn(
         `  [conflict] student ${studentId}: multiple funding sources found across classes: [${[...values].join(", ")}] — manual review required`
       );
-      skippedConflict++;
+      skippedConflict += 1;
       continue;
     }
 
@@ -84,9 +85,10 @@ const run = async () => {
 
     if (!isDryRun) {
       student.fundingSourceNational = value;
+      // eslint-disable-next-line no-await-in-loop
       await student.save();
     }
-    updated++;
+    updated += 1;
   }
 
   logger.info(

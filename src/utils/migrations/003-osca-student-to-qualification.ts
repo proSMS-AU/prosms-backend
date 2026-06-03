@@ -62,6 +62,7 @@ const run = async () => {
     if (!oscaCode) continue;
 
     // Find all classes this student is enrolled in
+    // eslint-disable-next-line no-await-in-loop
     const enrolledClasses = await ClassModel.find({
       "enrollments.studentInfo.id": studentId
     })
@@ -70,7 +71,7 @@ const run = async () => {
 
     if (enrolledClasses.length === 0) {
       logger.warn(`  [skip] student ${studentId}: not enrolled in any class — cannot resolve qualification`);
-      skippedAmbiguous++;
+      skippedAmbiguous += 1;
       continue;
     }
 
@@ -78,7 +79,7 @@ const run = async () => {
 
     if (qualIds.length === 0) {
       logger.warn(`  [skip] student ${studentId}: enrolled classes have no qualificationId`);
-      skippedAmbiguous++;
+      skippedAmbiguous += 1;
       continue;
     }
 
@@ -87,27 +88,30 @@ const run = async () => {
     );
 
     for (const qualId of qualIds) {
+      // eslint-disable-next-line no-await-in-loop
       const qual = await QualificationModel.findById(qualId);
       if (!qual) continue;
 
       if (qual.oscaIdentifier) {
         logger.info(`    [skip] qualification ${qualId}: already has oscaIdentifier="${qual.oscaIdentifier}"`);
-        skippedAlreadySet++;
+        skippedAlreadySet += 1;
         continue;
       }
 
       logger.info(`    [update] qualification ${qualId}: oscaIdentifier → "${oscaCode}"`);
       if (!isDryRun) {
         qual.oscaIdentifier = oscaCode;
+        // eslint-disable-next-line no-await-in-loop
         await qual.save();
       }
-      qualUpdated++;
+      qualUpdated += 1;
     }
 
     // Remove the now-migrated field from the student document
     if (!isDryRun) {
+      // eslint-disable-next-line no-await-in-loop
       await studentsCol.updateOne({ _id: student._id }, { $unset: { "participantsIdentifiers.oscaIdentifier": "" } });
-      studentsCleaned++;
+      studentsCleaned += 1;
     }
   }
 

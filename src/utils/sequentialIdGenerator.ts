@@ -29,7 +29,7 @@ const shuffleAlphabet = (alphabet: string, seed: string): string => {
   const chars = alphabet.split("");
   let hash = 0;
   for (const c of seed) hash = (hash * 31 + c.charCodeAt(0)) >>> 0;
-  for (let i = chars.length - 1; i > 0; i--) {
+  for (let i = chars.length - 1; i > 0; i -= 1) {
     hash = (hash * 1664525 + 1013904223) >>> 0;
     const j = hash % (i + 1);
     [chars[i], chars[j]] = [chars[j], chars[i]];

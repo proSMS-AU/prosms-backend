@@ -129,10 +129,10 @@ const upsertDeliveryLocations = async (
     const existing = await DeliveryLocationModel.findOne(filter);
     if (existing) {
       await DeliveryLocationModel.updateOne(filter, { $set: data });
-      updated++;
+      updated += 1;
     } else {
       await DeliveryLocationModel.create({ ...filter, ...data });
-      created++;
+      created += 1;
     }
 
     // Keep legacy Location in sync for classDetails.location FK
@@ -193,10 +193,10 @@ const upsertQualifications = async (
           ...(r.oscaIdentifier ? { oscaIdentifier: r.oscaIdentifier } : {})
         }
       });
-      updated++;
+      updated += 1;
     } else {
       await QualificationModel.create({ ...filter, ...data });
-      created++;
+      created += 1;
     }
   }
   return { created, updated };
@@ -243,7 +243,7 @@ const upsertUnits = async (
           vetFlag: r.vetFlag
         }
       });
-      updated++;
+      updated += 1;
     } else {
       await UnitModel.create({
         ...filter,
@@ -259,7 +259,7 @@ const upsertUnits = async (
         status: "Current",
         unitType: "Elective" as const
       });
-      created++;
+      created += 1;
     }
   }
   return { created, updated };
@@ -386,7 +386,7 @@ const upsertStudents = async (
     try {
       const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId });
       if (existing) {
-        result.skipped++;
+        result.skipped += 1;
         continue;
       }
 
@@ -470,11 +470,11 @@ const upsertStudents = async (
         parents: []
       });
 
-      result.created++;
+      result.created += 1;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       logger.warn(`[NAT Import] Student ${r.avetmissId} failed: ${msg}`);
-      result.failed++;
+      result.failed += 1;
       result.errors.push({ avetmissId: r.avetmissId, reason: msg });
     }
   }
@@ -507,7 +507,7 @@ const applyDisabilityTypes = async (organizationId: string, records: Nat90Record
       { organizationId, avetmissId },
       { $set: { "vetDetails.disabilityTypes": types, "vetDetails.disabilities": true } }
     );
-    if (res.modifiedCount) updated++;
+    if (res.modifiedCount) updated += 1;
   }
   return updated;
 };
@@ -539,7 +539,7 @@ const applyPriorEdAchievements = async (organizationId: string, records: Nat100R
       { organizationId, avetmissId },
       { $set: { "vetDetails.priorEducationalAchievements": achievements, "vetDetails.priorEducation": true } }
     );
-    if (res.modifiedCount) updated++;
+    if (res.modifiedCount) updated += 1;
   }
   return updated;
 };
@@ -707,7 +707,7 @@ const createSyntheticClasses = async (
         certificateShortId: null,
         certificateKey: null
       });
-      enrollmentsCreated++;
+      enrollmentsCreated += 1;
     }
 
     const newClass = await ClassModel.create({
@@ -743,7 +743,7 @@ const createSyntheticClasses = async (
     for (const e of enrollmentDocs) e.class.id = classId;
 
     await ClassModel.updateOne({ _id: newClass._id }, { $set: { enrollments: enrollmentDocs } });
-    created++;
+    created += 1;
   }
 
   return { created, enrollmentsCreated };
@@ -799,7 +799,7 @@ const applyCompletions = async (organizationId: string, records: Nat130Record[])
         $set: { "enrollments.$.completionDate": compDate, "enrollments.$.issuedFlag": r.issuedFlag === "Y" ? "Y" : "N" }
       }
     );
-    if (res.modifiedCount) updated++;
+    if (res.modifiedCount) updated += 1;
   }
   return updated;
 };

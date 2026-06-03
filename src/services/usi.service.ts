@@ -6,6 +6,7 @@ import { OrganizationModel } from "../model/organization.model";
 import { SSIDRequestModel } from "../model/ssid-request.model";
 import { StudentModel } from "../model/student.model";
 import { sendEmail } from "../utils/sendEmail";
+import { logger } from "../utils/logger";
 
 const SUPER_ADMIN_EMAIL = "prosms.au@gmail.com";
 const CLIENT_BASE_URL = config.get<string>("server.clientUrl") ?? "https://app.prosms.com.au";
@@ -77,7 +78,7 @@ const requestForSSIDByRTO = async (organizationId: string) => {
     });
   } catch (err) {
     // Email failure must not break the request flow
-    console.error("[SSID] Failed to notify SA by email:", err);
+    logger.error("[SSID] Failed to notify SA by email:", err);
   }
 
   return { success: true, status: request.status, alreadyRequested: false };
@@ -216,7 +217,7 @@ const generateAndEmailSSID = async (requestId: string): Promise<{ ssid: string; 
       request.status = "sent";
       await request.save();
     } catch (err) {
-      console.error("[SSID] Failed to send instruction email to admin:", err);
+      logger.error("[SSID] Failed to send instruction email to admin:", err);
       // Stay on "generated" — SA can manually resend
     }
   }
