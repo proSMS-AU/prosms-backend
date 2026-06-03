@@ -16,7 +16,7 @@ export type ConfigureRTOForUSIInputType = z.infer<typeof configureRTOForUSISchem
 export const verifyUSIWithStudentInfoSchema = z.object({
   body: z.object({
     usi: z.string().nonempty("USI is required"),
-    firstName: z.string().nonempty("First name is required"),
+    firstName: z.string().optional(),
     familyName: z.string().nonempty("Family name is required"),
     dateOfBirth: z.string().nonempty("Date of birth is required")
   })

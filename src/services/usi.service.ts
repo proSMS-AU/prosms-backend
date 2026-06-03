@@ -298,7 +298,7 @@ const verifyUSIWithStudentInfo = async (
   organizationId: string,
   studentInfo: {
     usi: string;
-    firstName: string;
+    firstName?: string;
     familyName: string; // lastName
     dateOfBirth: string; // yyyy-mm-dd
   }
