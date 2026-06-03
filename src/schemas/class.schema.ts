@@ -81,7 +81,7 @@ const ReportingDetailsSchema = object({
 
 // Fund Details Schema
 const FundDetailsSchema = object({
-  fundingSourceNational: string().min(1, "National funding source is required"),
+  fundingSourceNational: string().optional(),
   fundingSourceState: string().min(1, "State funding source is required"),
   specificFundingIdentifier: string().max(10, "Specific funding identifier must be at most 10 characters").optional(),
   principleFundingSourceAsqa: string().optional()
