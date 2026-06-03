@@ -701,7 +701,8 @@ const getStudentEnrollments = async (studentId: string, organizationId: string) 
 const bulkEnrollStudents = async (
   classId: string,
   studentIds: string[],
-  unitIds: string[]
+  unitIds: string[],
+  enrollmentType?: "FULL" | "SOA"
 ): Promise<{ success: string[]; failed: { studentId: string; reason: string }[] }> => {
   const classData = await ClassModel.findById(classId);
   if (!classData) throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Class not found!");
@@ -755,7 +756,8 @@ const bulkEnrollStudents = async (
         USI: studentData.participantsIdentifiers.USI
       },
       unitsOfCompetency,
-      enrollmentDate: new Date()
+      enrollmentDate: new Date(),
+      ...(enrollmentType ? { enrollmentType } : {})
     } as any);
 
     results.success.push(studentId);

@@ -656,12 +656,14 @@ const buildDeliveryDataSheet = (
   for (const cls of fullQualClasses) {
     const qual = cls.qualificationId as any;
 
-    const enrollmentsInRange = (cls.enrollments || []).filter((e: any) => {
+    // Exclude SOA enrollments from Table A counts (they go to Table B)
+    const fullEnrollments = (cls.enrollments || []).filter((e: any) => e.enrollmentType !== "SOA");
+    const enrollmentsInRange = fullEnrollments.filter((e: any) => {
       const d = new Date(e.enrollmentDate);
       return d >= params.startDate && d <= params.endDate;
     });
 
-    const aqfIssued = (cls.enrollments || []).filter((e: any) => {
+    const aqfIssued = fullEnrollments.filter((e: any) => {
       if (!e.certificateIssuedDate) return false;
       const d = new Date(e.certificateIssuedDate);
       return d >= params.startDate && d <= params.endDate;
@@ -758,43 +760,45 @@ const buildDeliveryDataSheet = (
     };
   });
 
-  // ── Table B data: aggregate units by unit code (SOA classes only) ─────────
+  // ── Table B data: aggregate units by unit code ───────────────────────────
+  // Sources: (a) entire SOA class, (b) individual enrollments in FULL_QUAL classes
+  //          where the student chose enrollmentType === "SOA".
   const unitMap = new Map<string, UnitAgg>();
 
-  for (const cls of soaClasses) {
+  const aggregateUnitsFromEnrollment = (cls: any, enrollment: any) => {
     const locs = resolveLocations(cls);
-    for (const enrollment of cls.enrollments || []) {
-      const enrollDate = new Date(enrollment.enrollmentDate);
-      const inRange = enrollDate >= params.startDate && enrollDate <= params.endDate;
-      for (const unit of enrollment.unitsOfCompetency || []) {
-        if (!unitMap.has(unit.code)) {
-          unitMap.set(unit.code, {
-            code: unit.code,
-            title: unit.title,
-            enrollmentCount: 0,
-            issuedCount: 0,
-            locations: new Set(),
-            fundingSources: new Set(),
-            deliveryModes: new Set(),
-            hasPartnership: false,
-            cohorts: new Set(),
-            comments: new Set()
-          });
-        }
-        const agg = unitMap.get(unit.code)!;
-        if (inRange) {
-          agg.enrollmentCount++;
-          if (unit.statusOfCompletion === "C") agg.issuedCount++;
-        }
-        locs.forEach((l) => agg.locations.add(l));
-        if (cls.fundDetails?.principleFundingSourceAsqa)
-          agg.fundingSources.add(cls.fundDetails.principleFundingSourceAsqa);
-        if (cls.reportingDetails?.principleDeliveryMode)
-          agg.deliveryModes.add(cls.reportingDetails.principleDeliveryMode);
-        if (cls.reportingDetails?.partnership) agg.hasPartnership = true;
-        if (cls.reportingDetails?.principalClientCohort) agg.cohorts.add(cls.reportingDetails.principalClientCohort);
-        if (cls.reportingDetails?.comment) agg.comments.add(cls.reportingDetails.comment);
+    const enrollDate = new Date(enrollment.enrollmentDate);
+    const inRange = enrollDate >= params.startDate && enrollDate <= params.endDate;
+    for (const unit of enrollment.unitsOfCompetency || []) {
+      if (!unitMap.has(unit.code)) {
+        unitMap.set(unit.code, {
+          code: unit.code, title: unit.title, enrollmentCount: 0, issuedCount: 0,
+          locations: new Set(), fundingSources: new Set(), deliveryModes: new Set(),
+          hasPartnership: false, cohorts: new Set(), comments: new Set()
+        });
       }
+      const agg = unitMap.get(unit.code)!;
+      if (inRange) { agg.enrollmentCount++; if (unit.statusOfCompletion === "C") agg.issuedCount++; }
+      locs.forEach((l) => agg.locations.add(l));
+      if (cls.fundDetails?.principleFundingSourceAsqa) agg.fundingSources.add(cls.fundDetails.principleFundingSourceAsqa);
+      if (cls.reportingDetails?.principleDeliveryMode) agg.deliveryModes.add(cls.reportingDetails.principleDeliveryMode);
+      if (cls.reportingDetails?.partnership) agg.hasPartnership = true;
+      if (cls.reportingDetails?.principalClientCohort) agg.cohorts.add(cls.reportingDetails.principalClientCohort);
+      if (cls.reportingDetails?.comment) agg.comments.add(cls.reportingDetails.comment);
+    }
+  };
+
+  // (a) SOA classes — all enrollments go to Table B
+  for (const cls of soaClasses) {
+    for (const enrollment of cls.enrollments || []) {
+      aggregateUnitsFromEnrollment(cls, enrollment);
+    }
+  }
+
+  // (b) FULL_QUAL classes — only enrollments where student chose enrollmentType === "SOA"
+  for (const cls of fullQualClasses) {
+    for (const enrollment of (cls.enrollments || []).filter((e: any) => e.enrollmentType === "SOA")) {
+      aggregateUnitsFromEnrollment(cls, enrollment);
     }
   }
 

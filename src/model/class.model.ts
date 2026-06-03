@@ -201,6 +201,11 @@ class Enrollments {
   // NAT00120 pos 100–109 — Required when funding code is 13 or 15
   @Prop({ type: String, default: "" })
   specificFundingIdentifier?: string;
+
+  // D2: per-enrollment program type. "FULL" → Table A (full qual), "SOA" → Table B (units only).
+  // Undefined means not set (treated as FULL for backwards compat).
+  @Prop({ type: String, enum: ["FULL", "SOA"] })
+  enrollmentType?: "FULL" | "SOA";
 }
 
 class ClassDetails {

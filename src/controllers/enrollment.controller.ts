@@ -115,13 +115,17 @@ const updateCourseEnrollAndCompleteDateHandler = async (req: Request, res: Respo
 // E-03 — Bulk enrol multiple students into one class
 const bulkEnrollStudentsHandler = async (req: Request, res: Response) => {
   const classId = req.params.id;
-  const { studentIds, unitIds } = req.body as { studentIds: string[]; unitIds: string[] };
+  const { studentIds, unitIds, enrollmentType } = req.body as {
+    studentIds: string[];
+    unitIds: string[];
+    enrollmentType?: "FULL" | "SOA";
+  };
 
   if (!Array.isArray(studentIds) || studentIds.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "studentIds must be a non-empty array");
   }
 
-  const result = await EnrollmentServices.bulkEnrollStudents(classId, studentIds, unitIds ?? []);
+  const result = await EnrollmentServices.bulkEnrollStudents(classId, studentIds, unitIds ?? [], enrollmentType);
   SendSuccessResponse.created({
     res,
     message: `Bulk enrol complete — ${result.success.length} enrolled, ${result.failed.length} failed`,
