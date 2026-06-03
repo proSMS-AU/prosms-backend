@@ -797,7 +797,15 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
 
     // FIX (Error #3705): validate postcode — must be 4-digit numeric, "OSPC", or "@@@@"
     const rawPostcode = (addr?.postCode ?? "").trim();
-    const postcode = /^\d{4}$/.test(rawPostcode) ? rawPostcode : rawPostcode.toUpperCase() === "OSPC" ? "OSPC" : "@@@@";
+    let postcode = /^\d{4}$/.test(rawPostcode) ? rawPostcode : rawPostcode.toUpperCase() === "OSPC" ? "OSPC" : "@@@@";
+
+    // Funding codes 31 (international+onshore) and 32 (international+offshore) always
+    // report OSPC/99 regardless of the real stored address (AVETMISS spec).
+    const studentFundingCode = (student.fundingSourceNational ?? "").trim();
+    if (studentFundingCode === "31" || studentFundingCode === "32") {
+      postcode = "OSPC";
+    }
+
     const indigenous = indigenousMap[((vet?.abOriginalOrigin as string) ?? "").toLowerCase()] ?? "@";
     const language = getLanguageIdentifierCode(vet?.language);
     const labourForce = getEmploymentStatusCode(vet?.employmentStatus); // "@@" if not set
@@ -807,7 +815,8 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
     const achievements = (vet?.priorEducationalAchievements ?? []).filter((a: any) => (a?.code ?? "").trim());
     const priorEdFlag = achievements.length > 0 ? "Y" : vet?.priorEducation === false ? "N" : "@";
     const suburb = (addr?.city ?? "").substring(0, 50);
-    const stateCode = getClientStateCode(addr?.state, postcode);
+    // stateCode must be "99" when postcode is OSPC (overseas)
+    const stateCode = postcode === "OSPC" ? "99" : getClientStateCode(addr?.state, postcode);
     const building = (addr?.building ?? "").substring(0, 50);
     const unit = (addr?.unit ?? "").substring(0, 30);
     const streetNumber = (addr?.streetNumber ?? "").toString().substring(0, 15);
