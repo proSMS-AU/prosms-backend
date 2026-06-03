@@ -27,6 +27,7 @@ router
   .get("/backend-service/health-check", asyncWrapper(usiControllers.usiServiceBackendHealthCheckHandler))
   .post(`${RTO_BASE_URL}/request-for-ssid/:organizationId`, asyncWrapper(usiControllers.requestForSSIDHandler))
   .get(`${SUPER_ADMIN_BASE_URL}/requests-for-ssid`, asyncWrapper(usiControllers.getAllSSIDRequestsHandler))
+  .patch(`${SUPER_ADMIN_BASE_URL}/ssid-request/:id/status`, asyncWrapper(usiControllers.updateSSIDRequestStatusHandler))
   .get(
     `${SUPER_ADMIN_BASE_URL}/generate-ssid/:organizationId`,
     asyncWrapper(usiControllers.generateSSIDBySuperAdminHandler)

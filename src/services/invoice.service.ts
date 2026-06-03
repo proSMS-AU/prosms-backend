@@ -126,8 +126,13 @@ const convertToPdf = async (docxBuffer: Buffer): Promise<Buffer> => {
 };
 
 // Generate manual invoice with multi-page support
-const generateManualInvoice = async (data: GenerateManualInvoiceRequestT, organizationId: string) => {
+const generateManualInvoice = async (data: GenerateManualInvoiceRequestT, organizationId: string | undefined) => {
   try {
+    // Admin-created invoices must always be org-scoped
+    if (data.createdBy === "ADMIN" && !organizationId) {
+      throw new AppError(httpStatus.BAD_REQUEST, "MISSING_ORG_ID", "Organization ID is required for admin invoices");
+    }
+
     // 1. Fetch template
     const template = await TemplateModel.findById(data.templateId);
     if (!template) {
@@ -140,7 +145,7 @@ const generateManualInvoice = async (data: GenerateManualInvoiceRequestT, organi
 
     // 2. Generate unique invoice ID
     const invoiceId = await generateSequentialId({
-      key: `invoice:${organizationId}`,
+      key: `invoice:${organizationId ?? "super-admin"}`,
       prefix: "INV",
       middleIndicator: "M",
       pad: 7

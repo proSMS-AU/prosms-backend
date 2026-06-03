@@ -121,6 +121,22 @@ const verifyUSIWithStudentIdHandler = async (req: Request, res: Response) => {
   });
 };
 
+const updateSSIDRequestStatusHandler = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const { status } = req.body as { status: "approved" | "rejected" };
+
+  if (!status || !["approved", "rejected"].includes(status)) {
+    throw new Error("status must be 'approved' or 'rejected'");
+  }
+
+  const result = await usiService.updateSSIDRequestStatus(id, status);
+  SendSuccessResponse.success({
+    res,
+    message: `SSID request ${status} successfully!`,
+    data: result
+  });
+};
+
 const getUSIVerificationsStatsHandler = async (req: Request, res: Response) => {
   SendSuccessResponse.success({
     res,
@@ -143,6 +159,7 @@ export const usiControllers = {
   getAllSSIDRequestsHandler,
   generateSSIDBySuperAdminHandler,
   getSSIDStatusHandler,
+  updateSSIDRequestStatusHandler,
   configureRTOForUSIHandler,
   getUSIConfigHandler,
   getUSIConfigurationStatusHandler,

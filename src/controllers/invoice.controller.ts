@@ -8,7 +8,7 @@ import { streamFromR2 } from "../services/cloudflare.service";
 import config from "config";
 
 const generateManualInvoiceHandler = async (req: Request, res: Response) => {
-  const result = await InvoiceServices.generateManualInvoice(req.body, req.user?.organizationId as string);
+  const result = await InvoiceServices.generateManualInvoice(req.body, req.user?.organizationId);
 
   SendSuccessResponse.created({
     res,
@@ -34,7 +34,7 @@ const generateAutoInvoiceHandler = async (req: Request, res: Response) => {
     studentSnapshot,
     classIds,
     createdBy,
-    req.user?.organizationId as string
+    req.user?.organizationId as string  // auto invoice is always org-scoped (admin only)
   );
 
   SendSuccessResponse.created({

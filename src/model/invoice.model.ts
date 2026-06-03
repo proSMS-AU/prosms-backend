@@ -60,9 +60,9 @@ export class Invoice {
 
   @Prop({
     ref: () => Organization,
-    required: true
+    required: false
   })
-  organizationId: mongoose.Types.ObjectId;
+  organizationId?: mongoose.Types.ObjectId;
 
   @Prop({
     required: true,

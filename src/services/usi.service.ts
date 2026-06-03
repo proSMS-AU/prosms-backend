@@ -510,12 +510,40 @@ const getUSIVerificationsCount = async (organizationId: string) => {
   };
 };
 
+const updateSSIDRequestStatus = async (
+  requestId: string,
+  status: "approved" | "rejected"
+): Promise<{ id: string; status: string; organizationId: string }> => {
+  const request = await SSIDRequestModel.findById(requestId);
+  if (!request) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "SSID request not found");
+  }
+
+  if (request.status !== "pending") {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "INVALID_STATUS_TRANSITION",
+      `Request is already ${request.status}`
+    );
+  }
+
+  request.status = status;
+  await request.save();
+
+  return {
+    id: request._id.toString(),
+    status: request.status,
+    organizationId: request.organizationId.toString()
+  };
+};
+
 export const usiService = {
   usiServiceBackendHealthCheck,
   requestForSSIDByRTO,
   getAllSSIDRequests,
   generateAndSaveSSIDBySuperAdmin,
   getSSIDStatus,
+  updateSSIDRequestStatus,
   configureRTOForUSI,
   getUSIConfig,
   getUSIConfigurationStatus,
