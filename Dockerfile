@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-common \
     fonts-dejavu-core \
     fonts-noto-core \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
 COPY package.json yarn.lock ./
