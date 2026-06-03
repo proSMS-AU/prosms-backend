@@ -731,7 +731,10 @@ export interface NatImportSummary {
   priorEdUpdates:    number;
   classes:           { created: number; enrollmentsCreated: number };
   completionUpdates: number;
+  filesFound:  string[];
+  filesMissing: string[];
   warnings: string[];
+  fileErrors: { file: string; error: string }[];
 }
 
 export const importFromNatZip = async (
@@ -741,10 +744,12 @@ export const importFromNatZip = async (
   const zip = new AdmZip(zipBuffer);
 
   const getFile = (name: string): string => {
-    // Match case-insensitively (some exports use lowercase)
     const entry = zip.getEntries().find((e) => e.entryName.toUpperCase().endsWith(name.toUpperCase()));
     return entry ? zip.readAsText(entry) : "";
   };
+
+  const FILE_NAMES = ["NAT00020.TXT","NAT00030A.TXT","NAT00060.TXT","NAT00080.TXT",
+    "NAT00085.TXT","NAT00090.TXT","NAT00100.TXT","NAT00120.TXT","NAT00130.TXT"] as const;
 
   const nat20  = getFile("NAT00020.TXT");
   const nat30  = getFile("NAT00030A.TXT");
@@ -756,51 +761,81 @@ export const importFromNatZip = async (
   const nat120 = getFile("NAT00120.TXT");
   const nat130 = getFile("NAT00130.TXT");
 
+  const fileMap: Record<string, string> = {
+    "NAT00020.TXT": nat20, "NAT00030A.TXT": nat30, "NAT00060.TXT": nat60,
+    "NAT00080.TXT": nat80, "NAT00085.TXT": nat85,  "NAT00090.TXT": nat90,
+    "NAT00100.TXT": nat100,"NAT00120.TXT": nat120,  "NAT00130.TXT": nat130
+  };
+  const filesFound  = FILE_NAMES.filter((n) => !!fileMap[n]);
+  const filesMissing = FILE_NAMES.filter((n) => !fileMap[n]);
+
   const warnings: string[] = [];
-  if (!nat80) warnings.push("NAT00080.TXT not found in ZIP — no students imported");
+  const fileErrors: { file: string; error: string }[] = [];
+
+  if (!nat80)  warnings.push("NAT00080.TXT not found in ZIP — no students imported");
   if (!nat120) warnings.push("NAT00120.TXT not found in ZIP — no classes created");
+
+  // Helper: run a file-level operation with isolated error capture
+  const tryFile = async <T>(file: string, fn: () => Promise<T>, fallback: T): Promise<T> => {
+    try { return await fn(); }
+    catch (err: any) {
+      const msg = err?.message ?? String(err);
+      fileErrors.push({ file, error: msg });
+      logger.error(`[NAT Import] ${file} failed: ${msg}`);
+      return fallback;
+    }
+  };
 
   // 1. Locations (must run before classes)
   const deliveryLocations = nat20
-    ? await upsertDeliveryLocations(organizationId, parseNAT00020(nat20))
+    ? await tryFile("NAT00020", () => upsertDeliveryLocations(organizationId, parseNAT00020(nat20)), { created: 0, updated: 0 })
     : { created: 0, updated: 0 };
 
   // 2. Qualifications (must run before classes)
   const qualifications = nat30
-    ? await upsertQualifications(organizationId, parseNAT00030A(nat30))
+    ? await tryFile("NAT00030A", () => upsertQualifications(organizationId, parseNAT00030A(nat30)), { created: 0, updated: 0 })
     : { created: 0, updated: 0 };
 
   // 3. Units (must run before classes)
   const units = nat60
-    ? await upsertUnits(organizationId, parseNAT00060(nat60))
+    ? await tryFile("NAT00060", () => upsertUnits(organizationId, parseNAT00060(nat60)), { created: 0, updated: 0 })
     : { created: 0, updated: 0 };
 
   // 4. Students (must run before classes)
   const nat80Records = nat80 ? parseNAT00080(nat80) : [];
   const nat85Map     = nat85 ? parseNAT00085(nat85) : new Map<string, Nat85Record>();
-  const students     = await upsertStudents(organizationId, nat80Records, nat85Map);
+  const students     = await tryFile("NAT00080", () => upsertStudents(organizationId, nat80Records, nat85Map),
+    { created: 0, skipped: 0, failed: nat80Records.length, errors: [] });
 
   // 5. Disability types
   const disabilityUpdates = nat90
-    ? await applyDisabilityTypes(organizationId, parseNAT00090(nat90))
+    ? await tryFile("NAT00090", () => applyDisabilityTypes(organizationId, parseNAT00090(nat90)), 0)
     : 0;
 
   // 6. Prior ed achievements
   const priorEdUpdates = nat100
-    ? await applyPriorEdAchievements(organizationId, parseNAT00100(nat100))
+    ? await tryFile("NAT00100", () => applyPriorEdAchievements(organizationId, parseNAT00100(nat100)), 0)
     : 0;
 
-  // 7. Synthetic classes + enrollments
-  const classes = nat120
-    ? await createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120)))
-    : { created: 0, enrollmentsCreated: 0 };
+  // 7. Synthetic classes + enrollments — NAT-03: dependency guard
+  let classes = { created: 0, enrollmentsCreated: 0 };
+  if (nat120) {
+    if (qualifications.created + qualifications.updated === 0 && !nat30) {
+      warnings.push("NAT00120 enrolments skipped — no qualifications found. Include NAT00030A.TXT in the ZIP.");
+    } else {
+      classes = await tryFile("NAT00120",
+        () => createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120))),
+        { created: 0, enrollmentsCreated: 0 }
+      );
+    }
+  }
 
   // 8. Completions
   const completionUpdates = nat130
-    ? await applyCompletions(organizationId, parseNAT00130(nat130))
+    ? await tryFile("NAT00130", () => applyCompletions(organizationId, parseNAT00130(nat130)), 0)
     : 0;
 
-  logger.info(`[NAT Import] org=${organizationId} locations=${deliveryLocations.created} quals=${qualifications.created} units=${units.created} students=${students.created} classes=${classes.created}`);
+  logger.info(`[NAT Import] org=${organizationId} found=${filesFound.join(",")} locations=${deliveryLocations.created} quals=${qualifications.created} units=${units.created} students=${students.created} classes=${classes.created} errors=${fileErrors.length}`);
 
-  return { deliveryLocations, qualifications, units, students, disabilityUpdates, priorEdUpdates, classes, completionUpdates, warnings };
+  return { deliveryLocations, qualifications, units, students, disabilityUpdates, priorEdUpdates, classes, completionUpdates, filesFound, filesMissing, warnings, fileErrors };
 };

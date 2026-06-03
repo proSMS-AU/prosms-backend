@@ -643,12 +643,13 @@ const buildDeliveryDataSheet = (
     };
   });
 
-  // E-05: split by programType. Default (unset) is treated as FULL_QUAL for Table A.
+  // E-05: split by programType. programType is stored in reportingDetails (not classDetails).
+  // Default (unset / FULL_QUAL) → Table A. "SOA" → Table B.
   const fullQualClasses = classes.filter(
-    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && (cls as any).classDetails?.programType !== "SOA"
+    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && cls.reportingDetails?.programType !== "SOA"
   );
   const soaClasses = classes.filter(
-    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && (cls as any).classDetails?.programType === "SOA"
+    (cls: any) => !cls.reportingDetails?.doNotReportAsqa && cls.reportingDetails?.programType === "SOA"
   );
 
   // ── Table A data rows — full qualifications/accredited courses ────────────
