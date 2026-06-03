@@ -643,8 +643,10 @@ const createSyntheticClasses = async (
       },
       reportingDetails: {
         partnership:            false,
-        principleDeliveryMode:  cls.deliveryMode?.trim() || " ",
-        principalClientCohort:  "",
+        // deliveryMode from NAT00120 pos 69 (YNN/NYN/NNY etc.); fall back to "YNN" (internal/face-to-face)
+        principleDeliveryMode:  cls.deliveryMode?.trim() || "YNN",
+        // NAT00120 does not carry principal client cohort — "@@" = not stated
+        principalClientCohort:  "@@",
         doNotReport:            false,
         doNotReportAsqa:        false
       },
