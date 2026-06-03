@@ -123,17 +123,39 @@ const verifyUSIWithStudentIdHandler = async (req: Request, res: Response) => {
 
 const updateSSIDRequestStatusHandler = async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { status } = req.body as { status: "approved" | "rejected" };
+  const { status } = req.body as { status: "rejected" };
 
-  if (!status || !["approved", "rejected"].includes(status)) {
-    throw new Error("status must be 'approved' or 'rejected'");
+  if (status !== "rejected") {
+    throw new Error("Only 'rejected' is valid here — use the generate endpoint to approve");
   }
 
   const result = await usiService.updateSSIDRequestStatus(id, status);
   SendSuccessResponse.success({
     res,
-    message: `SSID request ${status} successfully!`,
+    message: "SSID request rejected successfully!",
     data: result
+  });
+};
+
+const generateAndEmailSSIDHandler = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const result = await usiService.generateAndEmailSSID(id);
+  SendSuccessResponse.success({
+    res,
+    message: result.alreadyExisted
+      ? "SSID already existed — instruction email sent to admin"
+      : "SSID generated and instruction email sent to admin",
+    data: result
+  });
+};
+
+const resendSSIDEmailHandler = async (req: Request, res: Response) => {
+  const { organizationId } = req.params;
+  await usiService.resendSSIDEmailToAdmin(organizationId);
+  SendSuccessResponse.success({
+    res,
+    message: "SSID instruction email resent to admin",
+    data: null
   });
 };
 
@@ -158,6 +180,8 @@ export const usiControllers = {
   requestForSSIDHandler,
   getAllSSIDRequestsHandler,
   generateSSIDBySuperAdminHandler,
+  generateAndEmailSSIDHandler,
+  resendSSIDEmailHandler,
   getSSIDStatusHandler,
   updateSSIDRequestStatusHandler,
   configureRTOForUSIHandler,

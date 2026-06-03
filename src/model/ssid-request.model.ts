@@ -39,12 +39,13 @@ export class SSIDRequest {
   })
   requestDate: Date;
 
+  // S5: full lifecycle — pending → generated → sent → configured; or rejected
   @Prop({
     required: true,
     type: String,
-    enum: ["pending", "approved", "rejected"]
+    enum: ["pending", "generated", "sent", "configured", "rejected"]
   })
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "generated" | "sent" | "configured" | "rejected";
 }
 
 export const SSIDRequestModel = getModelForClass(SSIDRequest);

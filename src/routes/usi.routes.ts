@@ -28,6 +28,8 @@ router
   .post(`${RTO_BASE_URL}/request-for-ssid/:organizationId`, asyncWrapper(usiControllers.requestForSSIDHandler))
   .get(`${SUPER_ADMIN_BASE_URL}/requests-for-ssid`, asyncWrapper(usiControllers.getAllSSIDRequestsHandler))
   .patch(`${SUPER_ADMIN_BASE_URL}/ssid-request/:id/status`, asyncWrapper(usiControllers.updateSSIDRequestStatusHandler))
+  .post(`${SUPER_ADMIN_BASE_URL}/ssid-request/:id/generate-and-email`, asyncWrapper(usiControllers.generateAndEmailSSIDHandler))
+  .post(`${SUPER_ADMIN_BASE_URL}/ssid-resend/:organizationId`, asyncWrapper(usiControllers.resendSSIDEmailHandler))
   .get(
     `${SUPER_ADMIN_BASE_URL}/generate-ssid/:organizationId`,
     asyncWrapper(usiControllers.generateSSIDBySuperAdminHandler)

@@ -178,6 +178,86 @@ const generateAndSaveSSIDBySuperAdmin = async (
   };
 };
 
+// S2: generate SSID from the request list row + send instruction email to the admin
+const generateAndEmailSSID = async (requestId: string): Promise<{ ssid: string; alreadyExisted: boolean }> => {
+  const request = await SSIDRequestModel.findById(requestId);
+  if (!request) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "SSID request not found");
+  }
+  if (request.status === "rejected") {
+    throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "Cannot generate SSID for a rejected request");
+  }
+
+  // Reuse existing generateAndSaveSSIDBySuperAdmin to get / create the SSID
+  const orgId = request.organizationId.toString();
+  const { ssid } = await generateAndSaveSSIDBySuperAdmin(orgId);
+  const alreadyExisted = request.status !== "pending";
+
+  // Update request to "generated"
+  request.status = "generated";
+  await request.save();
+
+  // Look up admin email from the organization
+  const organization = await OrganizationModel.findById(orgId);
+  const adminEmail = organization?.email;
+
+  if (adminEmail) {
+    try {
+      await sendEmail({
+        to: adminEmail,
+        subject: "Your ProSMS SSID is Ready — Next Steps",
+        templateName: "ssid-generated-notify-admin",
+        templateData: {
+          organizationName: request.organizationName,
+          ssid,
+          configUrl: `${CLIENT_BASE_URL}/dashboard/settings?tab=usiConfiguration`
+        }
+      });
+      request.status = "sent";
+      await request.save();
+    } catch (err) {
+      console.error("[SSID] Failed to send instruction email to admin:", err);
+      // Stay on "generated" — SA can manually resend
+    }
+  }
+
+  return { ssid, alreadyExisted };
+};
+
+// S4: resend the instruction email for an org that already has an SSID
+const resendSSIDEmailToAdmin = async (organizationId: string): Promise<void> => {
+  const organization = await OrganizationModel.findById(organizationId);
+  if (!organization) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
+  }
+  const ssid = organization.usiConfig?.ssidInfo?.ssid;
+  if (!ssid) {
+    throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "No SSID generated for this organization yet");
+  }
+  const adminEmail = organization.email;
+  if (!adminEmail) {
+    throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "Organization has no email address on file");
+  }
+
+  await sendEmail({
+    to: adminEmail,
+    subject: "Your ProSMS SSID — Next Steps",
+    templateName: "ssid-generated-notify-admin",
+    templateData: {
+      organizationName: organization.name,
+      ssid,
+      configUrl: `${CLIENT_BASE_URL}/dashboard/settings?tab=usiConfiguration`
+    }
+  });
+
+  // Update the request row status to "sent"
+  await SSIDRequestModel.findOneAndUpdate(
+    { organizationId: organization._id, status: { $in: ["generated", "sent"] } },
+    { status: "sent" },
+    { sort: { requestDate: -1 } }
+  );
+};
+
 const getSSIDStatus = async (organizationId: string): Promise<{ status: "not_generated" | "generated" }> => {
   const organization = await OrganizationModel.findById(organizationId);
   if (!organization) {
@@ -539,20 +619,21 @@ const getUSIVerificationsCount = async (organizationId: string) => {
   };
 };
 
+// S5: reject only — approve path is now "generate + email" (generateAndEmailSSID)
 const updateSSIDRequestStatus = async (
   requestId: string,
-  status: "approved" | "rejected"
+  status: "rejected"
 ): Promise<{ id: string; status: string; organizationId: string }> => {
   const request = await SSIDRequestModel.findById(requestId);
   if (!request) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "SSID request not found");
   }
 
-  if (request.status !== "pending") {
+  if (!["pending", "generated"].includes(request.status)) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
       "INVALID_STATUS_TRANSITION",
-      `Request is already ${request.status}`
+      `Cannot reject a request that is already ${request.status}`
     );
   }
 
@@ -571,6 +652,8 @@ export const usiService = {
   requestForSSIDByRTO,
   getAllSSIDRequests,
   generateAndSaveSSIDBySuperAdmin,
+  generateAndEmailSSID,
+  resendSSIDEmailToAdmin,
   getSSIDStatus,
   updateSSIDRequestStatus,
   configureRTOForUSI,
