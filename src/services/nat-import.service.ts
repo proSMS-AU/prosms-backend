@@ -754,7 +754,8 @@ export const importFromNatZip = async (
     "NAT00085.TXT","NAT00090.TXT","NAT00100.TXT","NAT00120.TXT","NAT00130.TXT"] as const;
 
   const nat20  = getFile("NAT00020.TXT");
-  const nat30  = getFile("NAT00030A.TXT");
+  // NAT-FIX-3: some AVETMISS exports use NAT00030.TXT (no 'A'); accept both
+  const nat30  = getFile("NAT00030A.TXT") || getFile("NAT00030.TXT");
   const nat60  = getFile("NAT00060.TXT");
   const nat80  = getFile("NAT00080.TXT");
   const nat85  = getFile("NAT00085.TXT");
@@ -823,7 +824,7 @@ export const importFromNatZip = async (
   let classes = { created: 0, enrollmentsCreated: 0 };
   if (nat120) {
     if (qualifications.created + qualifications.updated === 0 && !nat30) {
-      warnings.push("NAT00120 enrolments skipped — no qualifications found. Include NAT00030A.TXT in the ZIP.");
+      warnings.push("NAT00120 enrolments skipped — no qualifications found. Include NAT00030A.TXT or NAT00030.TXT in the ZIP.");
     } else {
       classes = await tryFile("NAT00120",
         () => createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120))),
