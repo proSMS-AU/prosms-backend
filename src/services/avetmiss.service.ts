@@ -806,6 +806,17 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
       postcode = "OSPC";
     }
 
+    // ADDR-VAL: domestic funding codes (11/13/15/20) cannot have an overseas address.
+    // These students are Australian-funded — OSPC postcode is a data entry error.
+    const DOMESTIC_CODES = ["11", "13", "15", "20"];
+    if (DOMESTIC_CODES.includes(studentFundingCode) && postcode === "OSPC") {
+      console.warn(
+        `[AVETMISS] NAT00080: Student "${avetmissId}" has domestic funding code "${studentFundingCode}" ` +
+        `but postcode is OSPC — this is a data error. Domestic students must have a real AU address. ` +
+        `Reporting OSPC as-is; please correct the student record.`
+      );
+    }
+
     const indigenous = indigenousMap[((vet?.abOriginalOrigin as string) ?? "").toLowerCase()] ?? "@";
     const language = getLanguageIdentifierCode(vet?.language);
     const labourForce = getEmploymentStatusCode(vet?.employmentStatus); // "@@" if not set
