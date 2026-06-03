@@ -50,6 +50,16 @@ const generateSSIDBySuperAdminHandler = async (req: Request, res: Response) => {
   });
 };
 
+const getGeneratedSSIDHandler = async (req: Request, res: Response) => {
+  const { organizationId } = req.params;
+  const result = await usiService.getGeneratedSSID(organizationId);
+  SendSuccessResponse.success({
+    res,
+    message: "Generated SSID retrieved successfully",
+    data: result
+  });
+};
+
 const getSSIDStatusHandler = async (req: Request, res: Response) => {
   const { organizationId } = req.params;
   const usiServiceResponse = await usiService.getSSIDStatus(organizationId);
@@ -182,6 +192,7 @@ export const usiControllers = {
   generateSSIDBySuperAdminHandler,
   generateAndEmailSSIDHandler,
   resendSSIDEmailHandler,
+  getGeneratedSSIDHandler,
   getSSIDStatusHandler,
   updateSSIDRequestStatusHandler,
   configureRTOForUSIHandler,

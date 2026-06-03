@@ -258,6 +258,15 @@ const resendSSIDEmailToAdmin = async (organizationId: string): Promise<void> => 
   );
 };
 
+// S3: return the stored SSID so the config form can pre-fill it (read-only)
+const getGeneratedSSID = async (organizationId: string): Promise<{ ssid: string | null }> => {
+  const organization = await OrganizationModel.findById(organizationId);
+  if (!organization) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
+  }
+  return { ssid: organization.usiConfig?.ssidInfo?.ssid ?? null };
+};
+
 const getSSIDStatus = async (organizationId: string): Promise<{ status: "not_generated" | "generated" }> => {
   const organization = await OrganizationModel.findById(organizationId);
   if (!organization) {
@@ -304,17 +313,8 @@ const configureRTOForUSI = async (
       "Provided SSID does not match with the generated SSID for the organization. Please provide the correct SSID and try again."
     );
   }
-  if (
-    organization.usiConfig.configurationStatus === "configured" &&
-    organization.usiConfig.configurationExpiryDate &&
-    organization.usiConfig.configurationExpiryDate > new Date()
-  ) {
-    throw new AppError(
-      httpStatus.BAD_REQUEST,
-      BAD_REQUEST.code,
-      "USI is already configured for the organization and the configuration is still valid. If you think this is a mistake, please contact support to resolve the issue."
-    );
-  }
+  // S7: allow re-configuration (edit) — the old block prevented updating valid configs.
+  // Admin should always be able to update RAM dates / relationship status.
   if (data.ramExpiryDate && new Date(data.ramExpiryDate) < new Date()) {
     throw new AppError(
       httpStatus.BAD_REQUEST,
@@ -654,6 +654,7 @@ export const usiService = {
   generateAndSaveSSIDBySuperAdmin,
   generateAndEmailSSID,
   resendSSIDEmailToAdmin,
+  getGeneratedSSID,
   getSSIDStatus,
   updateSSIDRequestStatus,
   configureRTOForUSI,

@@ -35,6 +35,7 @@ router
     asyncWrapper(usiControllers.generateSSIDBySuperAdminHandler)
   )
   .get(`${RTO_BASE_URL}/ssid-status/:organizationId`, asyncWrapper(usiControllers.getSSIDStatusHandler))
+  .get(`${RTO_BASE_URL}/generated-ssid/:organizationId`, asyncWrapper(usiControllers.getGeneratedSSIDHandler))
   .post(
     `${RTO_BASE_URL}/configure-for-usi/:organizationId`,
     validateResource(configureRTOForUSISchema),
