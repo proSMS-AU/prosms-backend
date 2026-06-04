@@ -1792,11 +1792,16 @@ const importAvetmissReports = async (
 
     // Parse NAT files from the ZIP and auto-create records (locations, quals, units, students, classes)
     try {
-      const natSummary = await importFromNatZip(organizationId, item.buffer);
+      const natSummary = await importFromNatZip(organizationId, item.buffer, reportId);
       results[results.length - 1] = { ...results[results.length - 1], natImport: natSummary } as any;
     } catch (natErr) {
-      // NAT parsing failure must not roll back the archive — log and continue
+      // NAT parsing failure must not roll back the archive — surface it (idempotent re-import recovers)
+      const msg = natErr instanceof Error ? natErr.message : String(natErr);
       console.error(`[NAT Import] Failed for "${item.originalName}":`, natErr);
+      results[results.length - 1] = {
+        ...results[results.length - 1],
+        natImport: { status: "partial", error: msg }
+      } as any;
     }
   }
 

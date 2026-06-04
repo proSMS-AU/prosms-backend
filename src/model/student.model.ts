@@ -490,6 +490,10 @@ export class Student {
   // Set to true for students created via NAT file import (SA-06)
   @Prop({ type: Boolean, default: false })
   importedFromNat?: boolean;
+
+  // reportId of the AVETMISS import batch that first created this student (provenance)
+  @Prop({ type: String })
+  natImportReportId?: string;
 }
 
 export const StudentModel = getModelForClass(Student);

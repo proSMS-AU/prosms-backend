@@ -21,11 +21,15 @@ const importNatHandler = async (req: Request, res: Response) => {
 
   const result = await importFromNatZip(organizationId, zipFile.buffer);
 
-  SendSuccessResponse.created({
-    res,
-    message: `NAT import complete: ${result.students.created} students, ${result.classes.created} classes created`,
-    data: result
-  });
+  const summary =
+    `${result.students.created} students, ` +
+    `${result.classes.created} classes created, ${result.classes.updated} updated`;
+  const message =
+    result.status === "partial"
+      ? `Import partially completed (${summary}). Some records could not be imported — please re-import the same file to complete it.`
+      : `NAT import complete: ${summary}`;
+
+  SendSuccessResponse.created({ res, message, data: result });
 };
 
 export const NatImportController = { importNatHandler };

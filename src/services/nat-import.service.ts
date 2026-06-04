@@ -87,6 +87,39 @@ const parseNatDate = (s: string): Date | null => {
   return isNaN(d.getTime()) ? null : d;
 };
 
+// ─── User-facing import feedback (what / why / what-to-do) ────────────────────
+
+export type ImportIssueSeverity = "error" | "warning" | "skip";
+export type ImportIssueScope =
+  | "file"
+  | "student"
+  | "qualification"
+  | "unit"
+  | "location"
+  | "class"
+  | "enrolment"
+  | "completion";
+
+export interface ImportIssue {
+  severity: ImportIssueSeverity;
+  scope: ImportIssueScope;
+  ref?: string; // identifier the issue is about (avetmissId, unit code, qual code, …)
+  message: string; // plain-language "what happened + why"
+  action: string; // plain-language "what to do"
+}
+
+/** Turn a raw/technical error into a short plain-language sentence for end users */
+const friendlyImportError = (raw: string): string => {
+  if (!raw) return "Unknown error.";
+  if (/E11000|duplicate key/i.test(raw)) return "A record with the same unique value already exists.";
+  if (/givenName.*required|required.*givenName/i.test(raw)) return "The given name is missing.";
+  if (/surname.*required|required.*surname/i.test(raw)) return "The surname is missing.";
+  if (/email/i.test(raw) && /required|valid/i.test(raw)) return "The email is missing or invalid.";
+  if (/validation failed/i.test(raw)) return "Some required information was missing or invalid.";
+  if (/cast to .* failed/i.test(raw)) return "A field had an unexpected value.";
+  return raw;
+};
+
 // ─── NAT00020 — Delivery Locations ────────────────────────────────────────────
 
 interface Nat20Record {
@@ -378,7 +411,8 @@ export interface StudentImportResult {
 const upsertStudents = async (
   organizationId: string,
   nat80Records: Nat80Record[],
-  nat85Map: Map<string, Nat85Record>
+  nat85Map: Map<string, Nat85Record>,
+  reportId?: string
 ): Promise<StudentImportResult> => {
   const result: StudentImportResult = { created: 0, skipped: 0, failed: 0, errors: [] };
 
@@ -432,6 +466,7 @@ const upsertStudents = async (
         studentId,
         avetmissId: r.avetmissId,
         importedFromNat: true,
+        natImportReportId: reportId,
         personalInfo: {
           title: resolveTitle(r.gender, n85?.title),
           // Mononym: leave givenName blank; the single name is stored in surname (AVETMISS family name)
@@ -637,144 +672,290 @@ const buildSyntheticClasses = (records: Nat120Record[]): SyntheticClassData[] =>
   return Array.from(map.values());
 };
 
+interface SyntheticClassResult {
+  created: number;
+  updated: number;
+  enrollmentsCreated: number;
+  enrollmentsUpdated: number;
+  enrollmentsSkipped: number;
+  errors: { class: string; error: string }[];
+  issues: ImportIssue[];
+}
+
 const createSyntheticClasses = async (
   organizationId: string,
-  syntheticClasses: SyntheticClassData[]
-): Promise<{ created: number; enrollmentsCreated: number }> => {
+  syntheticClasses: SyntheticClassData[],
+  reportId?: string
+): Promise<SyntheticClassResult> => {
   let created = 0;
+  let updated = 0;
   let enrollmentsCreated = 0;
+  let enrollmentsUpdated = 0;
+  let enrollmentsSkipped = 0;
+  // Per-class failures are isolated here — one bad class never aborts the others (fail-loud, P4)
+  const errors: { class: string; error: string }[] = [];
+
+  // Plain-language feedback (what / why / what-to-do), de-duplicated so one missing unit = one issue
+  const issues: ImportIssue[] = [];
+  const seenIssue = new Set<string>();
+  const addIssue = (issue: ImportIssue) => {
+    const k = `${issue.severity}|${issue.scope}|${issue.ref ?? ""}|${issue.message}`;
+    if (seenIssue.has(k)) return;
+    seenIssue.add(k);
+    issues.push(issue);
+  };
+
+  // AVETMISS natural key for one enrolled unit line within a class:
+  // unit code + activity start date (a re-attempt on a new date is a distinct line).
+  const unitLineKey = (u: any): string =>
+    `${u.code}||${u.unitStartDate ? new Date(u.unitStartDate).getTime() : "na"}`;
 
   for (const cls of syntheticClasses) {
     const { qualCode, locationId } = cls.key;
+    // Deterministic identity → lets re-import find & merge instead of duplicating (P0 idempotency)
+    const natImportKey = `${qualCode}||${locationId}`;
 
-    // Look up references
-    const qualification = await QualificationModel.findOne({ organizationId, code: qualCode });
-    if (!qualification) {
-      logger.warn(`[NAT Import] NAT00120: qualification "${qualCode}" not found — skipping class`);
-      continue;
-    }
-
-    const delivLoc = await DeliveryLocationModel.findOne({ organizationId, locationIdentifier: locationId });
-    const legacyLoc = await LocationModel.findOne({ organizationId, locationId });
-    if (!legacyLoc) {
-      logger.warn(`[NAT Import] NAT00120: location "${locationId}" not in Location collection — skipping class`);
-      continue;
-    }
-
-    const classTitle = `[IMPORTED] ${qualCode} (${cls.startDate.toISOString().slice(0, 10)} to ${cls.endDate.toISOString().slice(0, 10)})`;
-
-    // Distinct units across this class's enrollments → drives the class "Units" tab (unitsInfo)
-    const classUnitsMap = new Map<string, any>();
-
-    // Build enrollment subdocuments
-    const enrollmentDocs: any[] = [];
-    for (const [clientId, unitRecords] of cls.enrollments) {
-      const student = await StudentModel.findOne({ organizationId, avetmissId: clientId }).select(
-        "_id studentId personalInfo contactDetails participantsIdentifiers"
-      );
-      if (!student) {
-        logger.warn(`[NAT Import] NAT00120: student "${clientId}" not found — skipping enrollment`);
+    try {
+      // Look up references
+      const qualification = await QualificationModel.findOne({ organizationId, code: qualCode });
+      if (!qualification) {
+        logger.warn(`[NAT Import] NAT00120: qualification "${qualCode}" not found — skipping class`);
+        addIssue({
+          severity: "skip",
+          scope: "qualification",
+          ref: qualCode,
+          message: `Skipped the class for qualification "${qualCode}" — this qualification is not in the import.`,
+          action: `Add qualification "${qualCode}" to NAT00030 (or NAT00030A) and re-import the same file.`
+        });
         continue;
       }
 
-      const unitsOfCompetency: any[] = [];
-      for (const ur of unitRecords) {
-        const unit = await UnitModel.findOne({ organizationId, code: ur.unitCode });
-        if (!unit) {
-          logger.warn(`[NAT Import] NAT00120: unit "${ur.unitCode}" not found — skipping`);
+      const delivLoc = await DeliveryLocationModel.findOne({ organizationId, locationIdentifier: locationId });
+      const legacyLoc = await LocationModel.findOne({ organizationId, locationId });
+      if (!legacyLoc) {
+        logger.warn(`[NAT Import] NAT00120: location "${locationId}" not in Location collection — skipping class`);
+        addIssue({
+          severity: "skip",
+          scope: "location",
+          ref: locationId,
+          message: `Skipped a class at delivery location "${locationId}" — this location is not in the import.`,
+          action: `Add location "${locationId}" to NAT00020 and re-import the same file.`
+        });
+        continue;
+      }
+
+      // ── Build the freshly-parsed enrolment lines from this file ──
+      // Distinct units across this file's rows → drives the class "Units" tab (unitsInfo)
+      const classUnitsMap = new Map<string, any>();
+      const built: { studentId: string; studentInfo: any; unitsOfCompetency: any[] }[] = [];
+
+      for (const [clientId, unitRecords] of cls.enrollments) {
+        const student = await StudentModel.findOne({ organizationId, avetmissId: clientId }).select(
+          "_id studentId personalInfo contactDetails participantsIdentifiers"
+        );
+        if (!student) {
+          logger.warn(`[NAT Import] NAT00120: student "${clientId}" not found — skipping enrollment`);
+          enrollmentsSkipped += 1;
+          addIssue({
+            severity: "skip",
+            scope: "enrolment",
+            ref: clientId,
+            message: `Skipped an enrolment for student "${clientId}" — this student is not in the client file.`,
+            action: `Add student "${clientId}" to NAT00080 and re-import the same file.`
+          });
           continue;
         }
 
-        // Remember each distinct unit for the class-level unitsInfo block
-        if (!classUnitsMap.has(unit.code)) {
-          const unitObj = (unit as any).toObject ? (unit as any).toObject() : unit;
-          classUnitsMap.set(unit.code, { ...unitObj, unitType: unitObj.unitType || "Elective" });
+        const unitsOfCompetency: any[] = [];
+        for (const ur of unitRecords) {
+          const unit = await UnitModel.findOne({ organizationId, code: ur.unitCode });
+          if (!unit) {
+            logger.warn(`[NAT Import] NAT00120: unit "${ur.unitCode}" not found — skipping`);
+            addIssue({
+              severity: "skip",
+              scope: "unit",
+              ref: ur.unitCode,
+              message: `Skipped unit "${ur.unitCode}" in one or more enrolments — this unit is not in the subject file.`,
+              action: `Add unit "${ur.unitCode}" to NAT00060 and re-import the same file.`
+            });
+            continue;
+          }
+
+          if (!classUnitsMap.has(unit.code)) {
+            const unitObj = (unit as any).toObject ? (unit as any).toObject() : unit;
+            classUnitsMap.set(unit.code, { ...unitObj, unitType: unitObj.unitType || "Elective" });
+          }
+
+          const statusCode = OUTCOME_CODE_REVERSE[ur.outcomeCode.padStart(2, "0")] ?? "CA";
+          unitsOfCompetency.push({
+            id: (unit._id as mongoose.Types.ObjectId).toString(),
+            code: unit.code,
+            hour: unit.hour ?? 0,
+            title: unit.title,
+            statusOfCompletion: statusCode,
+            classStartDate: cls.startDate,
+            classEndDate: cls.endDate,
+            unitStartDate: parseNatDate(ur.activityStart),
+            unitEndDate: parseNatDate(ur.activityEnd)
+          });
         }
 
-        const statusCode = OUTCOME_CODE_REVERSE[ur.outcomeCode.padStart(2, "0")] ?? "CA";
-        const unitStart = parseNatDate(ur.activityStart);
-        const unitEnd = parseNatDate(ur.activityEnd);
+        if (unitsOfCompetency.length === 0) continue;
 
-        unitsOfCompetency.push({
-          id: (unit._id as mongoose.Types.ObjectId).toString(),
-          code: unit.code,
-          hour: unit.hour ?? 0,
-          title: unit.title,
-          statusOfCompletion: statusCode,
-          classStartDate: cls.startDate,
-          classEndDate: cls.endDate,
-          unitStartDate: unitStart,
-          unitEndDate: unitEnd
+        const fullName = [student.personalInfo.givenName, student.personalInfo.surname].filter(Boolean).join(" ");
+        const studentIdStr = (student._id as mongoose.Types.ObjectId).toString();
+        built.push({
+          studentId: studentIdStr,
+          studentInfo: {
+            id: studentIdStr,
+            name: fullName,
+            email: student.contactDetails.email,
+            phone: student.contactDetails.personalPhone,
+            USI: student.participantsIdentifiers?.USI
+          },
+          unitsOfCompetency
         });
       }
 
-      if (unitsOfCompetency.length === 0) continue;
+      // Imported units are all treated as electives (NAT00060 carries no core/elective split)
+      const electiveUnits = Array.from(classUnitsMap.values());
 
-      const fullName = [student.personalInfo.givenName, student.personalInfo.surname].filter(Boolean).join(" ");
-      enrollmentDocs.push({
-        studentInfo: {
-          id: (student._id as mongoose.Types.ObjectId).toString(),
-          name: fullName,
-          email: student.contactDetails.email,
-          phone: student.contactDetails.personalPhone,
-          USI: student.participantsIdentifiers?.USI
-        },
+      // Build an enrolment subdocument from a freshly-parsed entry
+      const makeEnrollmentDoc = (b: (typeof built)[number], classId: string, title: string) => ({
+        studentInfo: b.studentInfo,
         enrollmentDate: cls.startDate,
-        class: { id: "", title: classTitle }, // id filled after class._id known
-        unitsOfCompetency,
+        class: { id: classId, title },
+        unitsOfCompetency: b.unitsOfCompetency,
         completionDate: null,
         certificateIssuedDate: null,
         certificateId: null,
         certificateShortId: null,
         certificateKey: null
       });
-      enrollmentsCreated += 1;
+
+      // Find this class by its deterministic key (every imported class is keyed on creation)
+      const existing = await ClassModel.findOne({ organizationId, importedFromNat: true, natImportKey });
+
+      if (!existing) {
+        // ── CREATE (atomic single write — _id pre-generated so the class can't be left half-built) ──
+        const classTitle = `[IMPORTED] ${qualCode} (${cls.startDate.toISOString().slice(0, 10)} to ${cls.endDate.toISOString().slice(0, 10)})`;
+        const _id = new mongoose.Types.ObjectId();
+        const classId = _id.toString();
+        const enrollmentDocs = built.map((b) => makeEnrollmentDoc(b, classId, classTitle));
+
+        await ClassModel.create({
+          _id,
+          organizationId,
+          qualificationId: qualification._id,
+          deliveryLocationId: delivLoc?._id,
+          importedFromNat: true,
+          natImportKey,
+          natImportReportId: reportId,
+          unitsInfo: { unitCategory: "Selected", selectedUnits: { core: [], elective: electiveUnits } },
+          classDetails: {
+            classTitle,
+            location: legacyLoc._id,
+            startDate: cls.startDate,
+            endDate: cls.endDate,
+            closeDays: [],
+            vetInSchool: false
+          },
+          reportingDetails: {
+            partnership: false,
+            // deliveryMode from NAT00120 pos 69 (YNN/NYN/NNY etc.); fall back to "YNN" (internal/face-to-face)
+            principleDeliveryMode: cls.deliveryMode?.trim() || "YNN",
+            // NAT00120 does not carry principal client cohort — "@@" = not stated
+            principalClientCohort: "@@",
+            doNotReport: false,
+            doNotReportAsqa: false
+          },
+          fundDetails: {
+            fundingSourceNational: cls.fundNational || "20",
+            fundingSourceState: cls.fundState?.trim() || " "
+          },
+          enrollments: enrollmentDocs
+        });
+
+        created += 1;
+        enrollmentsCreated += enrollmentDocs.length;
+        continue;
+      }
+
+      // ── MERGE into the existing imported class (idempotent re-import; single atomic updateOne) ──
+      const obj = existing.toObject() as any;
+      if (!Array.isArray(obj.enrollments)) obj.enrollments = [];
+      // Preserve any manual rename — never regenerate the title on merge
+      const title = obj.classDetails?.classTitle || "";
+      const enrollById = new Map<string, any>(obj.enrollments.map((e: any) => [e.studentInfo?.id, e]));
+
+      for (const b of built) {
+        const ex = enrollById.get(b.studentId);
+        if (!ex) {
+          const doc = makeEnrollmentDoc(b, obj._id.toString(), title);
+          obj.enrollments.push(doc);
+          enrollById.set(b.studentId, doc);
+          enrollmentsCreated += 1;
+          continue;
+        }
+        // Union unit lines by natural key; refresh activity (import-wins) for existing lines
+        const lineMap = new Map<string, any>((ex.unitsOfCompetency || []).map((u: any) => [unitLineKey(u), u]));
+        for (const nu of b.unitsOfCompetency) {
+          const cur = lineMap.get(unitLineKey(nu));
+          if (!cur) {
+            ex.unitsOfCompetency.push(nu);
+          } else {
+            cur.statusOfCompletion = nu.statusOfCompletion;
+            cur.classStartDate = nu.classStartDate;
+            cur.classEndDate = nu.classEndDate;
+            cur.unitStartDate = nu.unitStartDate;
+            cur.unitEndDate = nu.unitEndDate;
+          }
+        }
+        enrollmentsUpdated += 1;
+      }
+
+      // Union electives into unitsInfo (keep any existing core/elective)
+      const elective: any[] = obj.unitsInfo?.selectedUnits?.elective ?? [];
+      const haveCodes = new Set(elective.map((u: any) => u.code));
+      for (const [code, u] of classUnitsMap) if (!haveCodes.has(code)) elective.push(u);
+      const unitsInfo = {
+        unitCategory: obj.unitsInfo?.unitCategory || "Selected",
+        selectedUnits: { core: obj.unitsInfo?.selectedUnits?.core ?? [], elective }
+      };
+
+      // Expand the class date window to cover the newly-imported activity (e.g. 6-mo → 12-mo)
+      const startDate = cls.startDate < obj.classDetails.startDate ? cls.startDate : obj.classDetails.startDate;
+      const endDate = cls.endDate > obj.classDetails.endDate ? cls.endDate : obj.classDetails.endDate;
+
+      await ClassModel.updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            enrollments: obj.enrollments,
+            unitsInfo,
+            "classDetails.startDate": startDate,
+            "classDetails.endDate": endDate,
+            natImportReportId: reportId ?? obj.natImportReportId
+          }
+        }
+      );
+      updated += 1;
+    } catch (err: unknown) {
+      // Isolate the failure to this one class — keep importing the rest, report it for re-run
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error(`[NAT Import] NAT00120 class "${natImportKey}" failed: ${msg}`);
+      errors.push({ class: natImportKey, error: msg });
+      addIssue({
+        severity: "error",
+        scope: "class",
+        ref: `${qualCode} @ ${locationId}`,
+        message: `Could not import the class for "${qualCode}" at "${locationId}": ${friendlyImportError(msg)}`,
+        action: "Fix the issue above, then re-import the same file (already-imported records won't duplicate)."
+      });
     }
-
-    // Imported units are all treated as electives (NAT00060 carries no core/elective split)
-    const electiveUnits = Array.from(classUnitsMap.values());
-
-    const newClass = await ClassModel.create({
-      organizationId,
-      qualificationId: qualification._id,
-      deliveryLocationId: delivLoc?._id,
-      unitsInfo: {
-        unitCategory: "Selected",
-        selectedUnits: { core: [], elective: electiveUnits }
-      },
-      classDetails: {
-        classTitle,
-        location: legacyLoc._id,
-        startDate: cls.startDate,
-        endDate: cls.endDate,
-        closeDays: [],
-        vetInSchool: false
-      },
-      reportingDetails: {
-        partnership: false,
-        // deliveryMode from NAT00120 pos 69 (YNN/NYN/NNY etc.); fall back to "YNN" (internal/face-to-face)
-        principleDeliveryMode: cls.deliveryMode?.trim() || "YNN",
-        // NAT00120 does not carry principal client cohort — "@@" = not stated
-        principalClientCohort: "@@",
-        doNotReport: false,
-        doNotReportAsqa: false
-      },
-      fundDetails: {
-        fundingSourceNational: cls.fundNational || "20",
-        fundingSourceState: cls.fundState?.trim() || " "
-      },
-      enrollments: []
-    });
-
-    // Back-fill class.id into each enrollment
-    const classId = (newClass._id as mongoose.Types.ObjectId).toString();
-    for (const e of enrollmentDocs) e.class.id = classId;
-
-    await ClassModel.updateOne({ _id: newClass._id }, { $set: { enrollments: enrollmentDocs } });
-    created += 1;
   }
 
-  return { created, enrollmentsCreated };
+  return { created, updated, enrollmentsCreated, enrollmentsUpdated, enrollmentsSkipped, errors, issues };
 };
 
 // ─── NAT00130 — Completions ───────────────────────────────────────────────────
@@ -800,18 +981,28 @@ const parseNAT00130 = (content: string): Nat130Record[] =>
     )
     .filter((r) => r.clientId && r.qualCode);
 
-const applyCompletions = async (organizationId: string, records: Nat130Record[]): Promise<number> => {
+const applyCompletions = async (
+  organizationId: string,
+  records: Nat130Record[]
+): Promise<{ updated: number; skipped: number }> => {
   let updated = 0;
+  let skipped = 0;
   for (const r of records) {
     const compDate = parseNatDate(r.completionDate);
     if (!compDate) continue;
 
     const student = await StudentModel.findOne({ organizationId, avetmissId: r.clientId }).select("_id");
-    if (!student) continue;
+    if (!student) {
+      skipped += 1;
+      continue;
+    }
     const studentId = (student._id as mongoose.Types.ObjectId).toString();
 
     const qualification = await QualificationModel.findOne({ organizationId, code: r.qualCode }).select("_id");
-    if (!qualification) continue;
+    if (!qualification) {
+      skipped += 1;
+      continue;
+    }
 
     // Find the class for this qual that has an enrollment for this student
     const cls = await ClassModel.findOne({
@@ -819,7 +1010,10 @@ const applyCompletions = async (organizationId: string, records: Nat130Record[])
       qualificationId: qualification._id,
       "enrollments.studentInfo.id": studentId
     });
-    if (!cls) continue;
+    if (!cls) {
+      skipped += 1;
+      continue;
+    }
 
     const res = await ClassModel.updateOne(
       { _id: cls._id, "enrollments.studentInfo.id": studentId },
@@ -829,7 +1023,7 @@ const applyCompletions = async (organizationId: string, records: Nat130Record[])
     );
     if (res.modifiedCount) updated += 1;
   }
-  return updated;
+  return { updated, skipped };
 };
 
 // ─── Main orchestrator ────────────────────────────────────────────────────────
@@ -841,15 +1035,31 @@ export interface NatImportSummary {
   students: StudentImportResult;
   disabilityUpdates: number;
   priorEdUpdates: number;
-  classes: { created: number; enrollmentsCreated: number };
+  classes: {
+    created: number;
+    updated: number;
+    enrollmentsCreated: number;
+    enrollmentsUpdated: number;
+    enrollmentsSkipped: number;
+    errors: { class: string; error: string }[];
+    issues: ImportIssue[];
+  };
   completionUpdates: number;
   filesFound: string[];
   filesMissing: string[];
   warnings: string[];
   fileErrors: { file: string; error: string }[];
+  // "ok" = everything imported cleanly; "partial" = some files/classes failed, re-run to complete (idempotent)
+  status: "ok" | "partial";
+  // Plain-language, de-duplicated feedback for the user: what / why / what-to-do
+  issues: ImportIssue[];
 }
 
-export const importFromNatZip = async (organizationId: string, zipBuffer: Buffer): Promise<NatImportSummary> => {
+export const importFromNatZip = async (
+  organizationId: string,
+  zipBuffer: Buffer,
+  reportId?: string
+): Promise<NatImportSummary> => {
   const zip = new AdmZip(zipBuffer);
 
   const getFile = (name: string): string => {
@@ -936,7 +1146,7 @@ export const importFromNatZip = async (organizationId: string, zipBuffer: Buffer
   // 4. Students (must run before classes)
   const nat80Records = nat80 ? parseNAT00080(nat80) : [];
   const nat85Map = nat85 ? parseNAT00085(nat85) : new Map<string, Nat85Record>();
-  const students = await tryFile("NAT00080", () => upsertStudents(organizationId, nat80Records, nat85Map), {
+  const students = await tryFile("NAT00080", () => upsertStudents(organizationId, nat80Records, nat85Map, reportId), {
     created: 0,
     skipped: 0,
     failed: nat80Records.length,
@@ -954,7 +1164,15 @@ export const importFromNatZip = async (organizationId: string, zipBuffer: Buffer
     : 0;
 
   // 7. Synthetic classes + enrollments — NAT-03: dependency guard
-  let classes = { created: 0, enrollmentsCreated: 0 };
+  let classes: SyntheticClassResult = {
+    created: 0,
+    updated: 0,
+    enrollmentsCreated: 0,
+    enrollmentsUpdated: 0,
+    enrollmentsSkipped: 0,
+    errors: [],
+    issues: []
+  };
   if (nat120) {
     if (qualifications.created + qualifications.updated === 0 && !nat30) {
       warnings.push(
@@ -963,19 +1181,83 @@ export const importFromNatZip = async (organizationId: string, zipBuffer: Buffer
     } else {
       classes = await tryFile(
         "NAT00120",
-        () => createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120))),
-        { created: 0, enrollmentsCreated: 0 }
+        () => createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120)), reportId),
+        { created: 0, updated: 0, enrollmentsCreated: 0, enrollmentsUpdated: 0, enrollmentsSkipped: 0, errors: [], issues: [] }
       );
     }
   }
 
   // 8. Completions
-  const completionUpdates = nat130
-    ? await tryFile("NAT00130", () => applyCompletions(organizationId, parseNAT00130(nat130)), 0)
-    : 0;
+  const completions = nat130
+    ? await tryFile("NAT00130", () => applyCompletions(organizationId, parseNAT00130(nat130)), { updated: 0, skipped: 0 })
+    : { updated: 0, skipped: 0 };
+  const completionUpdates = completions.updated;
+
+  // ── Assemble the user-facing feedback report (what / why / what-to-do) ──
+  const issues: ImportIssue[] = [];
+
+  // Missing critical files
+  if (!nat80) {
+    issues.push({
+      severity: "warning",
+      scope: "file",
+      ref: "NAT00080",
+      message: "The client file (NAT00080) is missing — no students were imported.",
+      action: "Include NAT00080.TXT in the ZIP and re-import."
+    });
+  }
+  if (!nat120) {
+    issues.push({
+      severity: "warning",
+      scope: "file",
+      ref: "NAT00120",
+      message: "The enrolment file (NAT00120) is missing — no classes or enrolments were created.",
+      action: "Include NAT00120.TXT in the ZIP and re-import."
+    });
+  }
+
+  // File-level hard errors
+  for (const fe of fileErrors) {
+    issues.push({
+      severity: "error",
+      scope: "file",
+      ref: fe.file,
+      message: `Could not process ${fe.file}: ${friendlyImportError(fe.error)}`,
+      action: "Check that the file matches the AVETMISS format, then re-import."
+    });
+  }
+
+  // Student import failures
+  for (const e of students.errors) {
+    issues.push({
+      severity: "error",
+      scope: "student",
+      ref: e.avetmissId,
+      message: `Could not import student "${e.avetmissId}": ${friendlyImportError(e.reason)}`,
+      action: "Fix the highlighted detail in the file and re-import the same file."
+    });
+  }
+
+  // Class / enrolment skips & errors (already de-duplicated)
+  issues.push(...classes.issues);
+
+  // Completions that couldn't be attached
+  if (completions.skipped > 0) {
+    issues.push({
+      severity: "warning",
+      scope: "completion",
+      message: `${completions.skipped} program completion${completions.skipped === 1 ? "" : "s"} (NAT00130) could not be matched to an enrolment.`,
+      action: "These are usually skipped because the related student, qualification, or enrolment wasn't imported. Resolve the issues above and re-import."
+    });
+  }
+
+  // Fail-loud: any file-level error, per-class error, or failed student → import is "partial".
+  // Because the import is idempotent, re-running it completes the missing parts without duplicating.
+  const status: "ok" | "partial" =
+    fileErrors.length > 0 || classes.errors.length > 0 || students.failed > 0 ? "partial" : "ok";
 
   logger.info(
-    `[NAT Import] org=${organizationId} found=${filesFound.join(",")} locations=${deliveryLocations.created} quals=${qualifications.created} units=${units.created} students=${students.created} classes=${classes.created} errors=${fileErrors.length}`
+    `[NAT Import] org=${organizationId} status=${status} found=${filesFound.join(",")} locations=${deliveryLocations.created} quals=${qualifications.created} units=${units.created} students=${students.created} classes=${classes.created} classErrors=${classes.errors.length} fileErrors=${fileErrors.length}`
   );
 
   return {
@@ -990,6 +1272,8 @@ export const importFromNatZip = async (organizationId: string, zipBuffer: Buffer
     filesFound,
     filesMissing,
     warnings,
-    fileErrors
+    fileErrors,
+    status,
+    issues
   };
 };

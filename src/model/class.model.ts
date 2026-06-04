@@ -402,5 +402,19 @@ export class classModel {
   // Delivery location reference for NAT00020 cross-check (R-15)
   @Prop({ type: mongoose.Types.ObjectId })
   deliveryLocationId?: mongoose.Types.ObjectId;
+
+  // ─── NAT import provenance / idempotency (SA-06) ───
+  // True for synthetic classes created by the AVETMISS NAT import.
+  @Prop({ type: Boolean, default: false })
+  importedFromNat?: boolean;
+
+  // Deterministic identity for an imported class = `${qualCode}||${locationId}`.
+  // Lets re-import find and merge the same class instead of duplicating it.
+  @Prop({ type: String })
+  natImportKey?: string;
+
+  // reportId of the AVETMISS import batch that created this class (provenance / clean rollback).
+  @Prop({ type: String })
+  natImportReportId?: string;
 }
 export const ClassModel = getModelForClass(classModel);
