@@ -65,7 +65,7 @@ const dashboardStatistics = async (organizationId: string): Promise<DashboardSta
       overallCompletionRateResult
     ] = await Promise.all([
       // 1. Total Students
-      StudentModel.countDocuments({ organizationId }),
+      StudentModel.countDocuments({ organizationId, isDeleted: { $ne: true } }),
 
       // 2. Currently Enrolled Students (unique students with active enrollments)
       ClassModel.aggregate([
@@ -379,11 +379,12 @@ const studentStatistics = async (organizationId: string): Promise<StudentStats> 
     // Run all queries in parallel for better performance
     const [totalStudents, joinedThisYear, lastMonthEnrolledResult, usiVerifiedCount] = await Promise.all([
       // 1. Total Students in organization
-      StudentModel.countDocuments({ organizationId }),
+      StudentModel.countDocuments({ organizationId, isDeleted: { $ne: true } }),
 
       // 2. Students created (joined) this year - based on createdAt
       StudentModel.countDocuments({
         organizationId,
+        isDeleted: { $ne: true },
         createdAt: {
           $gte: yearStartDate,
           $lte: yearEndDate
@@ -408,6 +409,7 @@ const studentStatistics = async (organizationId: string): Promise<StudentStats> 
       // // 4. USI verified students
       StudentModel.countDocuments({
         organizationId,
+        isDeleted: { $ne: true },
         "participantsIdentifiers.USI": { $exists: true, $ne: "" },
         "participantsIdentifiers.isUSIVerified": true,
         "participantsIdentifiers.verifiedUsiInfo.usiStatus": "Active"

@@ -10,8 +10,12 @@ class PersonalInfo {
   })
   title: string;
 
+  // Required only for multi-name students. Single-name people (mononyms) store the
+  // single name in `surname` (AVETMISS family-name field) and leave givenName blank.
   @Prop({
-    required: true,
+    required: function (this: PersonalInfo) {
+      return !this.isSingleName;
+    },
     type: String
   })
   givenName: string;

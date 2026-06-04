@@ -384,9 +384,20 @@ const upsertStudents = async (
 
   for (const r of nat80Records) {
     try {
-      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId });
+      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId }).select(
+        "_id isDeleted"
+      );
       if (existing) {
-        result.skipped += 1;
+        // Re-import of a previously soft-deleted student → restore it so it reappears (issue #2)
+        if ((existing as any).isDeleted) {
+          await StudentModel.updateOne(
+            { _id: existing._id },
+            { $set: { isDeleted: false }, $unset: { deletedAt: "" } }
+          );
+          result.created += 1;
+        } else {
+          result.skipped += 1;
+        }
         continue;
       }
 
@@ -423,7 +434,8 @@ const upsertStudents = async (
         importedFromNat: true,
         personalInfo: {
           title: resolveTitle(r.gender, n85?.title),
-          givenName: isSingleName ? "Imported" : givenName || "Imported",
+          // Mononym: leave givenName blank; the single name is stored in surname (AVETMISS family name)
+          givenName: isSingleName ? "" : givenName || "Imported",
           surname: surname || "Imported",
           isSingleName,
           gender: GENDER_MAP[r.gender.toUpperCase()] ?? "notStated",
@@ -651,6 +663,9 @@ const createSyntheticClasses = async (
 
     const classTitle = `[IMPORTED] ${qualCode} (${cls.startDate.toISOString().slice(0, 10)} to ${cls.endDate.toISOString().slice(0, 10)})`;
 
+    // Distinct units across this class's enrollments → drives the class "Units" tab (unitsInfo)
+    const classUnitsMap = new Map<string, any>();
+
     // Build enrollment subdocuments
     const enrollmentDocs: any[] = [];
     for (const [clientId, unitRecords] of cls.enrollments) {
@@ -664,10 +679,16 @@ const createSyntheticClasses = async (
 
       const unitsOfCompetency: any[] = [];
       for (const ur of unitRecords) {
-        const unit = await UnitModel.findOne({ code: ur.unitCode });
+        const unit = await UnitModel.findOne({ organizationId, code: ur.unitCode });
         if (!unit) {
           logger.warn(`[NAT Import] NAT00120: unit "${ur.unitCode}" not found — skipping`);
           continue;
+        }
+
+        // Remember each distinct unit for the class-level unitsInfo block
+        if (!classUnitsMap.has(unit.code)) {
+          const unitObj = (unit as any).toObject ? (unit as any).toObject() : unit;
+          classUnitsMap.set(unit.code, { ...unitObj, unitType: unitObj.unitType || "Elective" });
         }
 
         const statusCode = OUTCOME_CODE_REVERSE[ur.outcomeCode.padStart(2, "0")] ?? "CA";
@@ -710,10 +731,17 @@ const createSyntheticClasses = async (
       enrollmentsCreated += 1;
     }
 
+    // Imported units are all treated as electives (NAT00060 carries no core/elective split)
+    const electiveUnits = Array.from(classUnitsMap.values());
+
     const newClass = await ClassModel.create({
       organizationId,
       qualificationId: qualification._id,
       deliveryLocationId: delivLoc?._id,
+      unitsInfo: {
+        unitCategory: "Selected",
+        selectedUnits: { core: [], elective: electiveUnits }
+      },
       classDetails: {
         classTitle,
         location: legacyLoc._id,

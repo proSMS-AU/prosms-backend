@@ -3,22 +3,29 @@ import { alternatePhoneSchema, phoneSchema } from "./common.schema";
 
 const PersonalInfoSchema = object({
   title: string().min(1, "Title is required"),
-  givenName: string().min(1, "Given name is required"),
+  givenName: string().optional(),
   middleName: string().optional(),
   surname: string().optional(),
   isSingleName: boolean().optional(),
   preferredName: string().optional(),
   gender: string().min(1, "Gender is required"),
   dateOfBirth: string().min(1, "Date of birth is required")
-}).refine(
-  (data) => {
-    if (!data.isSingleName) {
-      return data.surname && data.surname.trim().length >= 1;
+}).superRefine((data, ctx) => {
+  // Mononym (single name): the one name lives in `surname` (AVETMISS family name); given name not required.
+  if (data.isSingleName) {
+    if (!data.surname?.trim()) {
+      ctx.addIssue({ code: "custom", path: ["surname"], message: "Name is required" });
     }
-    return true;
-  },
-  { message: "Surname is required", path: ["surname"] }
-);
+    return;
+  }
+  // Multi-name: both given name and surname are required.
+  if (!data.givenName?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["givenName"], message: "Given name is required" });
+  }
+  if (!data.surname?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["surname"], message: "Surname is required" });
+  }
+});
 
 const EmploymentDetailsSchema = object({
   organization: string().optional(),
@@ -269,13 +276,14 @@ export const UpdateStudentSchema = object({
     employmentIndustry: string().optional(),
     language: string().optional(),
     englishProficiency: string().optional(),
-    englishAssistance: boolean().optional(),
-    atSchool: boolean().optional(),
+    // Tri-state flags: true / false / null (not stated) — imported students carry null
+    englishAssistance: boolean().nullable().optional(),
+    atSchool: boolean().nullable().optional(),
     educationLevel: string().optional(),
     priorEducationalAchievements: array(PriorEducationalAchievementSchema).optional(),
-    disabilities: boolean().optional(),
+    disabilities: boolean().nullable().optional(),
     disabilityTypes: array(string()).optional(),
-    priorEducation: boolean().optional(),
+    priorEducation: boolean().nullable().optional(),
     surveyContactStatus: string().optional(),
     position: string().optional(),
     division: string().optional(),

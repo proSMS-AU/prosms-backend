@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose, { Types } from "mongoose";
-import { BAD_REQUEST, CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus } from "../constants";
+import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus } from "../constants";
 import { ClassModel } from "../model/class.model";
 import { AddClassT, DeleteUnitsFromClassEnrollmentT } from "../schemas/class.schema";
 import { AppError } from "../utils/appError";
@@ -179,8 +179,28 @@ const updateClass = async (classId: string, data: any, organizationId: string) =
       throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
     }
 
+    // A class with enrolments may only have non-structural fields edited. Qualification, units and the
+    // enrolments themselves stay locked so enrolment↔unit data (and AVETMISS NAT00120) can't desync.
     if (existingClass.enrollments.length > 0) {
-      throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "Class cannot be updated as it has enrollments");
+      const setFields: Record<string, any> = {};
+      if (data.classDetails) setFields.classDetails = data.classDetails;
+      if (data.reportingDetails) setFields.reportingDetails = data.reportingDetails;
+      if (data.fundDetails) setFields.fundDetails = data.fundDetails;
+
+      // Keep the denormalised title copied onto each enrolment in sync with the class title
+      const newTitle = data.classDetails?.classTitle;
+      if (newTitle && newTitle !== existingClass.classDetails?.classTitle) {
+        setFields["enrollments.$[].class.title"] = newTitle;
+      }
+
+      const scopedUpdate = await ClassModel.findByIdAndUpdate(
+        classId,
+        { $set: setFields },
+        { new: true, session, runValidators: true }
+      );
+
+      await session.commitTransaction();
+      return scopedUpdate;
     }
 
     const updatedClass = await ClassModel.findByIdAndUpdate(

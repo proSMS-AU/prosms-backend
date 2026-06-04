@@ -12,11 +12,47 @@ const notFoundHandler = (req: Request, res: Response, next: NextFunction) => {
   next(error);
 };
 
+// Turn a schema path like "personalInfo.givenName" into a human label "Given Name"
+const humanizeFieldPath = (path: string): string => {
+  const last = (path || "").split(".").pop() || path || "field";
+  return last
+    .replace(/([A-Z])/g, " $1") // camelCase → spaced
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+};
+
+// Convert a raw Mongoose validation/cast error into a single user-friendly sentence
+const friendlyMongooseMessage = (error: any): string => {
+  const first: any = Object.values(error?.errors ?? {})[0];
+  if (!first) return "Some of the information provided is invalid. Please review and try again.";
+
+  const label = humanizeFieldPath(first.path ?? "");
+  if (first.kind === "required" || /is required/i.test(first.message ?? "")) {
+    return `${label} is required.`;
+  }
+  if (first.name === "CastError" || first.kind) {
+    return `${label} has an invalid value. Please check it and try again.`;
+  }
+  return `${label} is invalid. Please check it and try again.`;
+};
+
 const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
   const clientError = UNEXPECTED_ERROR;
   logger.error(
     `An unexpected error (path: ${req.path} | method: ${req.method}): `.concat(error?.message ?? String(error))
   );
+
+  // Mongoose schema validation / cast errors — translate the developer message to a user-friendly one
+  if (error?.name === "ValidationError" || error?.name === "CastError") {
+    const friendly = friendlyMongooseMessage(error);
+    return res.status(httpStatus.BAD_REQUEST).json({
+      success: false,
+      message: friendly,
+      data: { clientError: { code: "wrong_input_data", message: friendly } },
+      stack: process.env.NODE_ENV === "production" ? "🥞" : error.stack
+    });
+  }
 
   // MongoDB duplicate key error
   if (error?.code === 11000) {
