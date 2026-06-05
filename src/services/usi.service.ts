@@ -44,13 +44,58 @@ const requestForSSIDByRTO = async (organizationId: string) => {
     );
   }
 
-  // S6: dedupe — return the existing pending/approved request rather than creating another row
+  // Dedupe: never create a second row while an active request exists. Only a rejected
+  // request may be re-submitted (falls through to create a fresh one).
   const existing = await SSIDRequestModel.findOne({
     organizationId: organization._id,
-    status: { $in: ["pending", "approved"] }
-  });
+    status: { $in: ["pending", "generated", "sent", "configured"] }
+  }).sort({ requestDate: -1 });
+
   if (existing) {
-    return { success: true, status: existing.status, alreadyRequested: true };
+    // SSID already produced — don't re-create or re-email; point the admin to their inbox.
+    if (["generated", "sent", "configured"].includes(existing.status)) {
+      return {
+        success: true,
+        status: existing.status,
+        alreadyRequested: true,
+        alreadyGenerated: true,
+        message: "Your SSID has already been generated. Please follow the instructions sent to your email."
+      };
+    }
+
+    // Still pending — reuse the row, but nudge the Super Admin (throttled to avoid spam
+    // when the admin clicks repeatedly).
+    const REMINDER_THROTTLE_MS = 15 * 60 * 1000;
+    const lastReminder = existing.lastReminderAt ? new Date(existing.lastReminderAt).getTime() : 0;
+    if (Date.now() - lastReminder > REMINDER_THROTTLE_MS) {
+      try {
+        await sendEmail({
+          to: SUPER_ADMIN_EMAIL,
+          subject: `Reminder: pending SSID request — ${organization.name}`,
+          templateName: "ssid-request-notify-sa",
+          templateData: {
+            organizationName: organization.name,
+            rtoId: organization.rtoId,
+            abn: organization.ABN,
+            requestDate: new Date(existing.requestDate).toLocaleString("en-AU", { timeZone: "Australia/Sydney" }),
+            dashboardUrl: `${CLIENT_BASE_URL}/super-admin/dashboard/ssid/manage`
+          }
+        });
+        existing.lastReminderAt = new Date();
+        await existing.save();
+      } catch (err) {
+        logger.error("[SSID] Failed to re-notify SA by email:", err);
+      }
+    }
+
+    return {
+      success: true,
+      status: existing.status,
+      alreadyRequested: true,
+      alreadyGenerated: false,
+      message:
+        "Your request is already with the Super Admin and is being validated. Please wait — we'll email you once it's ready."
+    };
   }
 
   const request = await SSIDRequestModel.create({
@@ -81,7 +126,13 @@ const requestForSSIDByRTO = async (organizationId: string) => {
     logger.error("[SSID] Failed to notify SA by email:", err);
   }
 
-  return { success: true, status: request.status, alreadyRequested: false };
+  return {
+    success: true,
+    status: request.status,
+    alreadyRequested: false,
+    alreadyGenerated: false,
+    message: "Request sent to the Super Admin. Please wait while we validate and process it."
+  };
 };
 
 const getAllSSIDRequests = async () => {
@@ -332,6 +383,13 @@ const configureRTOForUSI = async (
   organization.usiConfig.configurationExpiryDate = new Date(data.ramExpiryDate);
   organization.markModified("usiConfig");
   await organization.save();
+
+  // Keep the SSID request row in sync so the Super Admin list reflects "configured"
+  // (previously it stayed on "sent" after the admin completed configuration).
+  await SSIDRequestModel.updateOne(
+    { organizationId: organization._id, status: { $in: ["generated", "sent"] } },
+    { status: "configured" }
+  );
 };
 
 const getUSIConfig = async (organizationId: string) => {

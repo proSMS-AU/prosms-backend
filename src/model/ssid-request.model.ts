@@ -46,6 +46,11 @@ export class SSIDRequest {
     enum: ["pending", "generated", "sent", "configured", "rejected"]
   })
   status: "pending" | "generated" | "sent" | "configured" | "rejected";
+
+  // Last time the Super Admin was (re)notified about this pending request — used to
+  // throttle reminder emails when an admin re-requests repeatedly.
+  @Prop({ type: Date })
+  lastReminderAt?: Date;
 }
 
 export const SSIDRequestModel = getModelForClass(SSIDRequest);

@@ -18,7 +18,7 @@ const requestForSSIDHandler = async (req: Request, res: Response) => {
 
   SendSuccessResponse.success({
     res,
-    message: `SSID request received for organization ID: ${organizationId}. Please wait while we process your request.`,
+    message: serviceResponse.message,
     data: {
       organizationId,
       ...serviceResponse
