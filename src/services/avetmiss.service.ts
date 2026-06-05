@@ -12,6 +12,7 @@ import { UnitModel } from "../model/unit.model";
 import { CloudflareService } from "./cloudflare.service";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus, UNIT_COMPETENCY_MAP } from "../constants";
+import { VALID_ASCL_LANGUAGE_CODES } from "../constants/ascl-languages.constant";
 import { AvetmissReportModel } from "../model/avetmiss-report.model";
 import { DeliveryLocationModel } from "../model/delivery-location.model";
 import { GenerateAvetmissReportT } from "../schemas/avetmiss-report.schema";
@@ -343,10 +344,16 @@ const getFundingSourceNationalCode = (value: string | undefined): string => {
 
 const getLanguageIdentifierCode = (value: string | undefined): string => {
   const raw = (value ?? "").trim();
-  if (!raw) return "@@@@";
+  if (!raw || raw.toUpperCase() === "@@@@") return "@@@@";
 
   const direct = raw.match(/^\d{4}$/)?.[0];
-  if (direct) return direct;
+  if (direct) {
+    // Only emit codes that exist in the official ASCL classification; anything else is
+    // reported as "@@@@" (not stated) so the NAT file stays valid (NCVER error #3726).
+    if (VALID_ASCL_LANGUAGE_CODES.has(direct)) return direct;
+    console.warn(`[AVETMISS] NAT00080: unrecognised language code "${direct}" → reported as @@@@.`);
+    return "@@@@";
+  }
 
   const normalized = raw.toLowerCase();
   const map: Record<string, string> = {
