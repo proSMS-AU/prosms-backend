@@ -292,15 +292,11 @@ class ReportingDetails {
   })
   partnership: boolean;
 
-  @Prop({
-    required: true
-  })
-  principleDeliveryMode: string;
+  @Prop()
+  principleDeliveryMode?: string;
 
-  @Prop({
-    required: true
-  })
-  principalClientCohort: string;
+  @Prop()
+  principalClientCohort?: string;
 
   @Prop()
   legacyDeliveryMode?: string;
@@ -322,10 +318,8 @@ class FundDetails {
   // Student-level fundingSourceNational is source of truth (R-06); this is the class-level fallback only
   @Prop()
   fundingSourceNational?: string;
-  @Prop({
-    required: true
-  })
-  fundingSourceState: string;
+  @Prop()
+  fundingSourceState?: string;
   @Prop()
   specificFundingIdentifier?: string;
   @Prop()

@@ -65,14 +65,8 @@ const ClassDetailsSchema = object({
 const ReportingDetailsSchema = object({
   reportingState: string().optional(),
   avetmissDeliveryMode: string().optional(),
-  principleDeliveryMode: string({ error: "Principle delivery mode is required" }).min(
-    1,
-    "Principle delivery mode must be selected"
-  ),
-  principalClientCohort: string({ error: "Principal client cohort is required" }).min(
-    1,
-    "Principal client cohort must be selected"
-  ),
+  principleDeliveryMode: string().optional(),
+  principalClientCohort: string().optional(),
   partnership: boolean({ error: "Partnership is required" }),
   legacyDeliveryMode: string().optional(),
   comment: string().optional(),
@@ -82,7 +76,7 @@ const ReportingDetailsSchema = object({
 // Fund Details Schema
 const FundDetailsSchema = object({
   fundingSourceNational: string().optional(),
-  fundingSourceState: string().min(1, "State funding source is required"),
+  fundingSourceState: string().optional(),
   specificFundingIdentifier: string().max(10, "Specific funding identifier must be at most 10 characters").optional(),
   principleFundingSourceAsqa: string().optional()
 }).superRefine((data, ctx) => {
