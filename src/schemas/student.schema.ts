@@ -1,6 +1,24 @@
 import z, { object, boolean, string, array } from "zod";
 import { alternatePhoneSchema, phoneSchema } from "./common.schema";
 
+const MIN_AGE_YEARS = 10;
+
+/**
+ * Returns true if the dateOfBirth string puts the student under MIN_AGE_YEARS as of today.
+ * Returns false for blank/unparseable values (those are handled by other rules).
+ */
+const isUnderMinAge = (dateOfBirth: string | undefined): boolean => {
+  const raw = (dateOfBirth ?? "").trim();
+  if (!raw) return false;
+  const dob = new Date(raw);
+  if (isNaN(dob.getTime())) return false;
+  const cutoff = new Date();
+  cutoff.setFullYear(cutoff.getFullYear() - MIN_AGE_YEARS);
+  return dob.getTime() > cutoff.getTime();
+};
+
+const AGE_MESSAGE = `Student must be at least ${MIN_AGE_YEARS} years old`;
+
 const PersonalInfoSchema = object({
   title: string().min(1, "Title is required"),
   givenName: string().optional(),
@@ -11,6 +29,10 @@ const PersonalInfoSchema = object({
   gender: string().min(1, "Gender is required"),
   dateOfBirth: string().min(1, "Date of birth is required")
 }).superRefine((data, ctx) => {
+  // Age guard: do not accept students under the minimum age (client requirement).
+  if (isUnderMinAge(data.dateOfBirth)) {
+    ctx.addIssue({ code: "custom", path: ["dateOfBirth"], message: AGE_MESSAGE });
+  }
   // Mononym (single name): the one name lives in `surname` (AVETMISS family name); given name not required.
   if (data.isSingleName) {
     if (!data.surname?.trim()) {
@@ -221,7 +243,13 @@ export const UpdateStudentSchema = object({
     position: string().optional(),
     division: string().optional(),
     section: string().optional()
-  }).optional(),
+  })
+    .superRefine((data, ctx) => {
+      if (isUnderMinAge(data.dateOfBirth)) {
+        ctx.addIssue({ code: "custom", path: ["dateOfBirth"], message: AGE_MESSAGE });
+      }
+    })
+    .optional(),
 
   employmentDetails: object({
     organization: string().optional(),

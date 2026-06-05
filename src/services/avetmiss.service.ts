@@ -61,6 +61,10 @@ const formatDate = (date: Date | string | null | undefined): string => {
  * Maps ProSMS state string (e.g. "VIC", "Victoria") to AVETMISS 2-digit state code.
  */
 const getStateCode = (state: string | undefined): string => {
+  const trimmed = (state ?? "").trim();
+  // Code-or-name: the frontend stores already-valid 2-digit codes ("01"), while NAT
+  // import stores full state names. Pass valid codes through before name mapping.
+  if (/^(0[1-9]|99)$/.test(trimmed)) return trimmed;
   const map: Record<string, string> = {
     nsw: "01",
     "new south wales": "01",
@@ -91,15 +95,43 @@ const getStateCode = (state: string | undefined): string => {
 };
 
 /**
+ * Derives the AVETMISS state code from an Australian postcode. Deterministic ranges per
+ * Australia Post; used as a safety net when the stored state is blank/unknown so a real
+ * AU postcode never reports as "@@" (not stated).
+ * Returns "" when the postcode is not a recognised AU 4-digit postcode.
+ */
+const getStateCodeFromPostcode = (postcode: string): string => {
+  const pc = parseInt((postcode ?? "").trim(), 10);
+  if (!Number.isFinite(pc) || !/^\d{4}$/.test((postcode ?? "").trim())) return "";
+  if (pc >= 800 && pc <= 999) return "07"; // NT
+  if ((pc >= 200 && pc <= 299) || (pc >= 2600 && pc <= 2620) || (pc >= 2900 && pc <= 2920)) return "08"; // ACT
+  if ((pc >= 1000 && pc <= 2599) || (pc >= 2619 && pc <= 2899) || (pc >= 2921 && pc <= 2999)) return "01"; // NSW
+  if ((pc >= 3000 && pc <= 3999) || (pc >= 8000 && pc <= 8999)) return "02"; // VIC
+  if ((pc >= 4000 && pc <= 4999) || (pc >= 9000 && pc <= 9999)) return "03"; // QLD
+  if (pc >= 5000 && pc <= 5999) return "04"; // SA
+  if (pc >= 6000 && pc <= 6999) return "05"; // WA
+  if (pc >= 7000 && pc <= 7999) return "06"; // TAS
+  return "";
+};
+
+/**
  * NAT00080 state code handling:
  * - OSPC postcode => 99 (overseas)
- * - blank/unknown state => @@ (not stated)
+ * - valid stored state (code or name) => that code
+ * - blank/unknown state but a real AU postcode => derived from postcode
+ * - otherwise => @@ (not stated)
  */
 const getClientStateCode = (state: string | undefined, postcode: string): string => {
   if ((postcode ?? "").toUpperCase() === "OSPC") return "99";
   const raw = (state ?? "").trim();
-  if (!raw) return "@@";
-  return getStateCode(raw);
+  if (raw) {
+    const mapped = getStateCode(raw);
+    if (mapped !== "@@") return mapped;
+  }
+  // State blank or unrecognised — fall back to the postcode-derived state.
+  const fromPostcode = getStateCodeFromPostcode(postcode);
+  if (fromPostcode) return fromPostcode;
+  return "@@";
 };
 
 /**
@@ -216,13 +248,19 @@ const getSchoolLevelCode = (educationLevel: string | undefined): string => {
     "trade-qualification": "@@",
     other: "@@",
 
-    // Numeric pass-through for legacy values
+    // Numeric pass-through for already-valid AVETMISS school-level codes
     "02": "02",
+    "03": "03",
+    "04": "04",
+    "05": "05",
+    "06": "06",
+    "07": "07",
     "08": "08",
     "09": "09",
     "10": "10",
     "11": "11",
     "12": "12",
+    "13": "13",
 
     "year 8 or below": "08",
     "year 8": "08",
@@ -721,6 +759,12 @@ const generateNAT00080 = async (
   };
 
   const indigenousMap: Record<string, string> = {
+    // Frontend stores numeric codes; pass them through.
+    "1": "1",
+    "2": "2",
+    "3": "3",
+    "4": "4",
+    // Form / display slugs
     aboriginal: "1",
     "yes-aboriginal": "1",
     "torres strait islander": "2",
@@ -730,7 +774,11 @@ const generateNAT00080 = async (
     no: "4",
     neither: "4",
     "not stated": "@",
-    "": "@"
+    "": "@",
+    // NAT-import slugs (lower-cased): aboriginal/neither/notStated covered above/below.
+    torresstrait: "2",
+    both: "3",
+    notstated: "@"
   };
 
   // Error #3811: deduplicate by avetmissId
