@@ -120,8 +120,12 @@ const getUniqueTrainersHandler = async (req: Request, res: Response) => {
 };
 
 const bulkEnrollStudentsHandler = async (req: Request, res: Response) => {
-  const { studentIds, unitIds } = req.body as { studentIds: string[]; unitIds: string[] };
-  const result = await EnrollmentServices.bulkEnrollStudents(req.params.id, studentIds, unitIds);
+  const { studentIds, unitIds, enrollmentType } = req.body as {
+    studentIds: string[];
+    unitIds: string[];
+    enrollmentType?: "FULL" | "SOA";
+  };
+  const result = await EnrollmentServices.bulkEnrollStudents(req.params.id, studentIds, unitIds, enrollmentType);
   SendSuccessResponse.success({ res, message: "Bulk enrollment completed", data: result });
 };
 
