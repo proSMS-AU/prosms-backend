@@ -1,11 +1,110 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import mongoose, { Types } from "mongoose";
-import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus } from "../constants";
+import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus, UNIT_COMPETENCY_MAP } from "../constants";
 import { ClassModel } from "../model/class.model";
 import { AddClassT, DeleteUnitsFromClassEnrollmentT } from "../schemas/class.schema";
 import { AppError } from "../utils/appError";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { StudentModel } from "../model/student.model";
+
+// Status meaning "no work done yet" — only such units are safe to drop when a
+// unit is removed from a class that already has enrolled students.
+const NOT_STARTED_STATUS = UNIT_COMPETENCY_MAP.NYS.code;
+
+export interface EnrollmentSyncSummary {
+  syncedStudents: number;
+  skippedCertified: number;
+  addedUnitCodes: string[];
+  removedUnitCodes: string[];
+  // Units that were dropped from the class but kept on a student because they
+  // already had a result/progress (would otherwise lose reportable AVETMISS data).
+  protectedUnits: { studentName: string; units: string[] }[];
+}
+
+/**
+ * Reconcile every enrolled student's unit snapshot against the class's new unit
+ * list. Students with an issued certificate are frozen. For everyone else:
+ *  - units newly added to the class are appended (status "Not yet started")
+ *  - units still present are left untouched (preserves their progress/result)
+ *  - units removed from the class are dropped ONLY if the student hasn't started
+ *    them; units with any progress are protected (kept) and reported back.
+ */
+const syncEnrollmentUnits = (classDoc: any): EnrollmentSyncSummary => {
+  const allNewUnits = [
+    ...(classDoc.unitsInfo?.selectedUnits?.core ?? []),
+    ...(classDoc.unitsInfo?.selectedUnits?.elective ?? [])
+  ];
+  const newUnitIds = new Set(allNewUnits.map((u: any) => String(u.id)));
+
+  const summary: EnrollmentSyncSummary = {
+    syncedStudents: 0,
+    skippedCertified: 0,
+    addedUnitCodes: [],
+    removedUnitCodes: [],
+    protectedUnits: []
+  };
+  const addedCodes = new Set<string>();
+  const removedCodes = new Set<string>();
+
+  for (const enr of classDoc.enrollments ?? []) {
+    const hasCertificate =
+      enr.certificateId !== null && enr.certificateIssuedDate !== null && enr.certificateShortId !== null;
+    if (hasCertificate) {
+      summary.skippedCertified++;
+      continue;
+    }
+
+    const currentById = new Map((enr.unitsOfCompetency ?? []).map((u: any) => [String(u.id), u]));
+    const nextUnits: any[] = [];
+    let changed = false;
+
+    // Keep or add each unit that belongs to the class now.
+    for (const u of allNewUnits) {
+      const existing = currentById.get(String(u.id));
+      if (existing) {
+        nextUnits.push(existing);
+      } else {
+        nextUnits.push({
+          id: u.id,
+          code: u.code,
+          hour: u.hour,
+          title: u.title,
+          statusOfCompletion: NOT_STARTED_STATUS,
+          classStartDate: classDoc.classDetails.startDate,
+          classEndDate: classDoc.classDetails.endDate,
+          unitStartDate: new Date(),
+          unitEndDate: classDoc.classDetails.endDate,
+          unitEnrollmentDate: new Date()
+        });
+        addedCodes.add(u.code);
+        changed = true;
+      }
+    }
+
+    // Units the student has that are no longer on the class.
+    const protectedForStudent: string[] = [];
+    for (const eu of enr.unitsOfCompetency ?? []) {
+      if (newUnitIds.has(String(eu.id))) continue;
+      if (eu.statusOfCompletion === NOT_STARTED_STATUS) {
+        removedCodes.add(eu.code);
+        changed = true;
+      } else {
+        nextUnits.push(eu);
+        protectedForStudent.push(eu.code);
+      }
+    }
+
+    enr.unitsOfCompetency = nextUnits;
+    if (protectedForStudent.length) {
+      summary.protectedUnits.push({ studentName: enr.studentInfo?.name ?? "Student", units: protectedForStudent });
+    }
+    if (changed || protectedForStudent.length) summary.syncedStudents++;
+  }
+
+  summary.addedUnitCodes = [...addedCodes];
+  summary.removedUnitCodes = [...removedCodes];
+  return summary;
+};
 
 const addClass = async (classData: AddClassT, organizationId: string) => {
   const existingClass = await ClassModel.findOne({
@@ -176,50 +275,43 @@ const updateClass = async (classId: string, data: any, organizationId: string) =
     }).session(session);
 
     if (!existingClass) {
-      throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
+      throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "We couldn't find this class.");
     }
 
-    // A class with enrolments may only have non-structural fields edited. Qualification, units and the
-    // enrolments themselves stay locked so enrolment↔unit data (and AVETMISS NAT00120) can't desync.
-    if (existingClass.enrollments.length > 0) {
-      const setFields: Record<string, any> = {};
-      if (data.classDetails) setFields.classDetails = data.classDetails;
-      if (data.reportingDetails) setFields.reportingDetails = data.reportingDetails;
-      if (data.fundDetails) setFields.fundDetails = data.fundDetails;
+    const hadEnrollments = existingClass.enrollments.length > 0;
 
-      // Keep the denormalised title copied onto each enrolment in sync with the class title
+    // Full edit is allowed even when students are enrolled. Completed/certified
+    // students stay protected because their unit snapshot is reconciled, not wiped
+    // (see syncEnrollmentUnits).
+    if (data.classDetails) existingClass.classDetails = data.classDetails;
+    if (data.reportingDetails) existingClass.reportingDetails = data.reportingDetails;
+    if (data.fundDetails) existingClass.fundDetails = data.fundDetails;
+    if (data.qualificationId) existingClass.qualificationId = data.qualificationId;
+    if (data.deliveryLocationId) existingClass.deliveryLocationId = data.deliveryLocationId;
+    if (data.unitsInfo) existingClass.unitsInfo = data.unitsInfo;
+
+    let syncSummary: EnrollmentSyncSummary | null = null;
+
+    if (hadEnrollments) {
+      // Keep the denormalised title copied onto each enrolment in sync with the class title.
       const newTitle = data.classDetails?.classTitle;
-      if (newTitle && newTitle !== existingClass.classDetails?.classTitle) {
-        setFields["enrollments.$[].class.title"] = newTitle;
+      if (newTitle) {
+        existingClass.enrollments.forEach((e: any) => {
+          e.class.title = newTitle;
+        });
       }
-
-      const scopedUpdate = await ClassModel.findByIdAndUpdate(
-        classId,
-        { $set: setFields },
-        { new: true, session, runValidators: true }
-      );
-
-      await session.commitTransaction();
-      return scopedUpdate;
+      // Reconcile each enrolled student's unit snapshot with the new unit list.
+      if (data.unitsInfo) {
+        syncSummary = syncEnrollmentUnits(existingClass);
+      }
+    } else if (data.enrollments) {
+      existingClass.enrollments = data.enrollments;
     }
 
-    const updatedClass = await ClassModel.findByIdAndUpdate(
-      classId,
-      {
-        $set: {
-          qualification: data.qualification,
-          unitsInfo: data.unitsInfo,
-          classDetails: data.classDetails,
-          reportingDetails: data.reportingDetails,
-          fundDetails: data.fundDetails,
-          ...(data.enrollments && { enrollments: data.enrollments })
-        }
-      },
-      { new: true, session, runValidators: true }
-    );
-
+    await existingClass.save({ session });
     await session.commitTransaction();
-    return updatedClass;
+
+    return { ...existingClass.toObject(), syncSummary };
   } catch (error) {
     await session.abortTransaction();
     throw error;

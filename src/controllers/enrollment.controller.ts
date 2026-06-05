@@ -143,6 +143,18 @@ const bulkUpdateDatesHandler = async (req: Request, res: Response) => {
   SendSuccessResponse.updated({ res, message: `Updated dates for ${result.updatedCount} enrollment(s)`, data: result });
 };
 
+const removeEnrollmentHandler = async (req: Request, res: Response) => {
+  const { classId, studentId } = req.params;
+
+  const result = await EnrollmentServices.removeEnrollment(classId, studentId);
+
+  SendSuccessResponse.deleted({
+    res,
+    message: "Student removed from the class.",
+    data: result
+  });
+};
+
 export const EnrollmentController = {
   addEnrollmentHandler,
   addEnrollmentWithNotifyHandler,
@@ -152,5 +164,6 @@ export const EnrollmentController = {
   unitsStatusBulkUpdateHandler,
   updateCourseEnrollAndCompleteDateHandler,
   bulkEnrollStudentsHandler,
-  bulkUpdateDatesHandler
+  bulkUpdateDatesHandler,
+  removeEnrollmentHandler
 };

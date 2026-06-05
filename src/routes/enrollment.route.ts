@@ -42,4 +42,7 @@ router.patch(
   asyncWrapper(EnrollmentController.updateCourseEnrollAndCompleteDateHandler)
 );
 
+// Withdraw / remove a single student from a class (hard delete, blocked if a certificate was issued)
+router.delete("/:classId/student/:studentId", asyncWrapper(EnrollmentController.removeEnrollmentHandler));
+
 export default router;

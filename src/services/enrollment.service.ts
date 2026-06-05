@@ -207,7 +207,7 @@ const removeEnrollment = async (classId: string, studentId: string) => {
   const classData = await ClassModel.findById(classId);
 
   if (!classData) {
-    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "We couldn't find this class.");
   }
 
   const enrollmentIndex = classData.enrollments.findIndex(
@@ -215,11 +215,37 @@ const removeEnrollment = async (classId: string, studentId: string) => {
   );
 
   if (enrollmentIndex === -1) {
-    throw new AppError(httpStatus.NOT_FOUND, "NOT_FOUND", "Student enrollment not found in this class!");
+    throw new AppError(httpStatus.NOT_FOUND, "NOT_FOUND", "This student isn't enrolled in this class.");
+  }
+
+  const enrollment = classData.enrollments[enrollmentIndex];
+
+  // Guard: a student with an issued certificate can't be removed — deleting the
+  // enrollment would desync their certificate from AVETMISS/ASQA reporting.
+  const hasCertificate =
+    enrollment.certificateId !== null &&
+    enrollment.certificateIssuedDate !== null &&
+    enrollment.certificateShortId !== null;
+
+  if (hasCertificate) {
+    throw new AppError(
+      httpStatus.CONFLICT,
+      "CERTIFICATE_ALREADY_ISSUED",
+      `Can't remove ${enrollment.studentInfo.name} — a certificate has already been issued for them.`
+    );
   }
 
   classData.enrollments.splice(enrollmentIndex, 1);
   await classData.save();
+
+  logActivity({
+    organizationId: String(classData.organizationId),
+    entityType: "enrollment",
+    entityId: String(classData._id),
+    entityLabel: enrollment.studentInfo.name,
+    action: "unenroll",
+    description: `Removed from class "${classData.classDetails.classTitle}"`
+  });
 
   return classData;
 };
