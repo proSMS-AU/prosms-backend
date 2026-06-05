@@ -691,7 +691,11 @@ const generateNAT00060 = async (unitCodes: string[], organizationId: string): Pr
  *   Pos 257–326 : Address street name              (70, A)
  *   Pos 327     : Survey contact status            ( 1, A)
  */
-const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): Promise<string> => {
+const generateNAT00080 = async (
+  studentIds: string[],
+  collectionEndDate: Date,
+  studentFundingMap: Map<string, string>
+): Promise<string> => {
   if (!studentIds?.length) return "";
 
   const students = await StudentModel.find({ _id: { $in: studentIds } }).lean();
@@ -798,7 +802,13 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
 
     // Funding codes 31 (international+onshore) and 32 (international+offshore) always
     // report OSPC/99 regardless of the real stored address (AVETMISS spec).
-    const studentFundingCode = (student.fundingSourceNational ?? "").trim();
+    // Effective funding resolves student-level first, then class-level fallback, so the
+    // rule fires whether the code was entered on the student profile or the class.
+    const studentFundingCode = (
+      studentFundingMap.get(String(student._id)) ??
+      student.fundingSourceNational ??
+      ""
+    ).trim();
     if (studentFundingCode === "31" || studentFundingCode === "32") {
       postcode = "OSPC";
     }
@@ -890,7 +900,10 @@ const generateNAT00080 = async (studentIds: string[], collectionEndDate: Date): 
  *   Pos 478–557 : Email address (alternative)    (80, A)
  *   Record length = 557
  */
-const generateNAT00085 = async (studentIds: string[]): Promise<string> => {
+const generateNAT00085 = async (
+  studentIds: string[],
+  studentFundingMap: Map<string, string>
+): Promise<string> => {
   const students = await StudentModel.find({ _id: { $in: studentIds } });
 
   const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -944,11 +957,19 @@ const generateNAT00085 = async (studentIds: string[]): Promise<string> => {
 
     // FIX (Error #3705/#3706): validate postcode — must be 4-digit numeric, "OSPC", or "@@@@"
     const rawPostcode85 = (addr?.postCode ?? "").trim();
-    const postcode85 = /^\d{4}$/.test(rawPostcode85)
+    let postcode85 = /^\d{4}$/.test(rawPostcode85)
       ? rawPostcode85
       : rawPostcode85.toUpperCase() === "OSPC"
         ? "OSPC"
         : "@@@@";
+
+    // International funding (31 onshore / 32 offshore) → overseas address: postcode OSPC,
+    // and the state identifier (pos 336) auto-resolves to "99" via getClientStateCode.
+    // Keeps NAT00085 consistent with NAT00080 so the two files never disagree.
+    const fundingCode85 = (studentFundingMap.get(String(student._id)) ?? "").trim();
+    if (fundingCode85 === "31" || fundingCode85 === "32") {
+      postcode85 = "OSPC";
+    }
 
     // Email validation (Rule #4635): blank if malformed
     const emailRaw = contact?.email ?? "";
@@ -1158,6 +1179,10 @@ const generateNAT00120 = async (
   qualificationIds: Set<string>;
   unitCodes: Set<string>;
   locationMap: Map<string, { locationId: string; name: string; city?: string; postcode?: string; state?: string }>;
+  // Per-student effective funding source national (student-level overrides class-level).
+  // Drives the OSPC/state-99 overseas rule in NAT00080/NAT00085 so it works whether the
+  // funding code was entered on the student profile or on the class Fund Details.
+  studentFundingMap: Map<string, string>;
 }> => {
   const classes = await ClassModel.find({
     organizationId,
@@ -1176,6 +1201,7 @@ const generateNAT00120 = async (
   const studentIds = new Set<string>();
   const qualificationIds = new Set<string>();
   const unitCodes = new Set<string>();
+  const studentFundingMap = new Map<string, string>();
   const locationMap = new Map<
     string,
     { locationId: string; name: string; city?: string; postcode?: string; state?: string }
@@ -1373,6 +1399,15 @@ const generateNAT00120 = async (
         const studentFundRaw = (student as any)?.fundingSourceNational;
         const effectiveFundNational = studentFundRaw ? getFundingSourceNationalCode(studentFundRaw) : fundNational;
 
+        // Record effective funding per student for the NAT00080/00085 overseas rule.
+        // International codes (31/32) win over domestic if a student spans multiple classes,
+        // so an offshore-funded student is never reported with an Australian address.
+        const sid = String(enrollment.studentInfo.id);
+        const prevFunding = studentFundingMap.get(sid);
+        if (!prevFunding || (prevFunding !== "31" && prevFunding !== "32")) {
+          studentFundingMap.set(sid, effectiveFundNational);
+        }
+
         // R-05: Commencing program code — "3"=commencing, "4"=continuing, "8"=UoC/SOA only
         // Explicit override takes precedence; blank = auto-derive
         const qualId = (qual as any)?._id?.toString() ?? "";
@@ -1422,7 +1457,7 @@ const generateNAT00120 = async (
     }
   }
 
-  return { content: lines.join(""), studentIds, qualificationIds, unitCodes, locationMap };
+  return { content: lines.join(""), studentIds, qualificationIds, unitCodes, locationMap, studentFundingMap };
 };
 
 /**
@@ -1576,8 +1611,12 @@ const generateAvetmissReport = async (
   const nat20 = await generateNAT00020(rtoId, Array.from(nat120Result.locationMap.values()));
   const nat30 = await generateNAT00030(Array.from(nat120Result.qualificationIds));
   const nat60 = await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
-  const nat80 = await generateNAT00080(Array.from(nat120Result.studentIds), endDate);
-  const nat85 = await generateNAT00085(Array.from(nat120Result.studentIds));
+  const nat80 = await generateNAT00080(
+    Array.from(nat120Result.studentIds),
+    endDate,
+    nat120Result.studentFundingMap
+  );
+  const nat85 = await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
   const nat90 = await generateNAT00090(Array.from(nat120Result.studentIds));
   const nat100 = await generateNAT00100(Array.from(nat120Result.studentIds));
   const nat130 = await generateNAT00130(organizationId, rtoId, startDate, endDate);
