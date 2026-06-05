@@ -50,7 +50,7 @@ const syncEnrollmentUnits = (classDoc: any): EnrollmentSyncSummary => {
     const hasCertificate =
       enr.certificateId !== null && enr.certificateIssuedDate !== null && enr.certificateShortId !== null;
     if (hasCertificate) {
-      summary.skippedCertified++;
+      summary.skippedCertified += 1;
       continue;
     }
 
@@ -98,7 +98,7 @@ const syncEnrollmentUnits = (classDoc: any): EnrollmentSyncSummary => {
     if (protectedForStudent.length) {
       summary.protectedUnits.push({ studentName: enr.studentInfo?.name ?? "Student", units: protectedForStudent });
     }
-    if (changed || protectedForStudent.length) summary.syncedStudents++;
+    if (changed || protectedForStudent.length) summary.syncedStudents += 1;
   }
 
   summary.addedUnitCodes = [...addedCodes];

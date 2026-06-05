@@ -910,10 +910,7 @@ const generateNAT00080 = async (
  *   Pos 478–557 : Email address (alternative)    (80, A)
  *   Record length = 557
  */
-const generateNAT00085 = async (
-  studentIds: string[],
-  studentFundingMap: Map<string, string>
-): Promise<string> => {
+const generateNAT00085 = async (studentIds: string[], studentFundingMap: Map<string, string>): Promise<string> => {
   const students = await StudentModel.find({ _id: { $in: studentIds } });
 
   const isValidEmail = (email: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -1621,11 +1618,7 @@ const generateAvetmissReport = async (
   const nat20 = await generateNAT00020(rtoId, Array.from(nat120Result.locationMap.values()));
   const nat30 = await generateNAT00030(Array.from(nat120Result.qualificationIds));
   const nat60 = await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
-  const nat80 = await generateNAT00080(
-    Array.from(nat120Result.studentIds),
-    endDate,
-    nat120Result.studentFundingMap
-  );
+  const nat80 = await generateNAT00080(Array.from(nat120Result.studentIds), endDate, nat120Result.studentFundingMap);
   const nat85 = await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
   const nat90 = await generateNAT00090(Array.from(nat120Result.studentIds));
   const nat100 = await generateNAT00100(Array.from(nat120Result.studentIds));

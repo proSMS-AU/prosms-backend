@@ -461,5 +461,5 @@ export const VALID_ASCL_LANGUAGE_CODES = new Set<string>([
   "9601",
   "9701",
   "9702",
-  "9799",
+  "9799"
 ]);

@@ -418,9 +418,7 @@ const upsertStudents = async (
 
   for (const r of nat80Records) {
     try {
-      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId }).select(
-        "_id isDeleted"
-      );
+      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId }).select("_id isDeleted");
       if (existing) {
         // Re-import of a previously soft-deleted student → restore it so it reappears (issue #2)
         if ((existing as any).isDeleted) {
@@ -707,8 +705,7 @@ const createSyntheticClasses = async (
 
   // AVETMISS natural key for one enrolled unit line within a class:
   // unit code + activity start date (a re-attempt on a new date is a distinct line).
-  const unitLineKey = (u: any): string =>
-    `${u.code}||${u.unitStartDate ? new Date(u.unitStartDate).getTime() : "na"}`;
+  const unitLineKey = (u: any): string => `${u.code}||${u.unitStartDate ? new Date(u.unitStartDate).getTime() : "na"}`;
 
   for (const cls of syntheticClasses) {
     const { qualCode, locationId } = cls.key;
@@ -1182,14 +1179,25 @@ export const importFromNatZip = async (
       classes = await tryFile(
         "NAT00120",
         () => createSyntheticClasses(organizationId, buildSyntheticClasses(parseNAT00120(nat120)), reportId),
-        { created: 0, updated: 0, enrollmentsCreated: 0, enrollmentsUpdated: 0, enrollmentsSkipped: 0, errors: [], issues: [] }
+        {
+          created: 0,
+          updated: 0,
+          enrollmentsCreated: 0,
+          enrollmentsUpdated: 0,
+          enrollmentsSkipped: 0,
+          errors: [],
+          issues: []
+        }
       );
     }
   }
 
   // 8. Completions
   const completions = nat130
-    ? await tryFile("NAT00130", () => applyCompletions(organizationId, parseNAT00130(nat130)), { updated: 0, skipped: 0 })
+    ? await tryFile("NAT00130", () => applyCompletions(organizationId, parseNAT00130(nat130)), {
+        updated: 0,
+        skipped: 0
+      })
     : { updated: 0, skipped: 0 };
   const completionUpdates = completions.updated;
 
@@ -1247,7 +1255,8 @@ export const importFromNatZip = async (
       severity: "warning",
       scope: "completion",
       message: `${completions.skipped} program completion${completions.skipped === 1 ? "" : "s"} (NAT00130) could not be matched to an enrolment.`,
-      action: "These are usually skipped because the related student, qualification, or enrolment wasn't imported. Resolve the issues above and re-import."
+      action:
+        "These are usually skipped because the related student, qualification, or enrolment wasn't imported. Resolve the issues above and re-import."
     });
   }
 
