@@ -83,7 +83,10 @@ const getStateCode = (state: string | undefined): string => {
     ovs: "99",
     overseas: "99"
   };
-  return map[(state ?? "").toLowerCase()] ?? "99";
+  // Unknown/blank state → "@@" (not stated). Never default to "99": that falsely flags an
+  // Australian client as overseas and trips NCVER #3707 (state 99 vs Australian postcode).
+  // Explicit "overseas"/"ovs" still maps to 99 above; OSPC handling lives in getClientStateCode.
+  return map[(state ?? "").trim().toLowerCase()] ?? "@@";
 };
 
 /**
