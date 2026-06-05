@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import jwt from "jsonwebtoken";
 import config from "config";
+import { randomBytes } from "crypto";
+import { hashPassword } from "better-auth/crypto";
 import { sendEmail } from "../utils/sendEmail";
 import { RegisterOrganizationInput, SendOnboardUrlInput, TokenPayload } from "../schemas/super-admin/onboard.schema";
 import { OrganizationModel } from "../model/organization.model";
@@ -10,6 +12,15 @@ import mongoose from "mongoose";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, httpStatus } from "../constants";
 import { CloudflareService } from "./cloudflare.service";
+
+// Random string id matching the format used for the seeded super admin (better-auth ids).
+const generateAuthId = (): string => {
+  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const bytes = randomBytes(32);
+  return Array.from(bytes)
+    .map((b) => chars[b % chars.length])
+    .join("");
+};
 
 // generate onboard token
 const generateOnboardToken = (data: SendOnboardUrlInput) => {
@@ -177,6 +188,43 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
 
       units = await UnitModel.insertMany(unitsToInsert, { session });
     }
+
+    // ========== CREATE ADMIN LOGIN (better-auth user + credential account) ==========
+    // The admin's email is already proven: the SA-issued onboard token embedded this
+    // email and the form is locked to it, so the account is created emailVerified=true.
+    // Created server-side here (instead of a public sign-up call) so verification is
+    // tied to the onboard token and stays atomic with the organization.
+    const now = new Date();
+    const userId = generateAuthId();
+    const hashedPassword = await hashPassword(data.auth.password);
+
+    await db!.collection("user").insertOne(
+      {
+        _id: userId as unknown as never,
+        name: data.auth.name,
+        email: data.auth.email,
+        emailVerified: true,
+        role: "ADMIN",
+        organizationId: org._id.toString(),
+        image: data.organization.logoUrl || null,
+        createdAt: now,
+        updatedAt: now
+      },
+      { session }
+    );
+
+    await db!.collection("account").insertOne(
+      {
+        _id: generateAuthId() as unknown as never,
+        userId,
+        accountId: data.auth.email,
+        providerId: "credential",
+        password: hashedPassword,
+        createdAt: now,
+        updatedAt: now
+      },
+      { session }
+    );
 
     await session.commitTransaction();
     await session.endSession();
