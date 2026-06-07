@@ -3,6 +3,7 @@
 import mongoose from "mongoose";
 import { QualificationModel } from "../model/qualification.model";
 import { UnitModel } from "../model/unit.model";
+import { logActivity } from "../utils/activityLogger";
 import { IQualificationCreate, IQualificationUpdate } from "../schemas/qualification.schema";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { AppError } from "../utils/appError";
@@ -209,7 +210,7 @@ const updateQualificationWithUnits = async (
   }
 };
 
-const deleteQualification = async (id: string) => {
+const deleteQualification = async (id: string, actorUserId?: string) => {
   // checking is there any associated units
   const childUnits = await UnitModel.find({ qualificationId: id });
   if (childUnits.length > 0) {
@@ -220,6 +221,17 @@ const deleteQualification = async (id: string) => {
   if (!qualification) {
     throw new AppError(httpStatus.NOT_FOUND, "QUALIFICATION_NOT_FOUND", "Qualification not found");
   }
+
+  logActivity({
+    organizationId: String(qualification.organizationId),
+    actorUserId,
+    entityType: "qualification",
+    entityId: String(qualification._id),
+    entityLabel: `${qualification.code ?? ""} ${qualification.title ?? ""}`.trim(),
+    action: "delete",
+    before: qualification.toObject() as unknown as Record<string, unknown>,
+    undoable: true
+  });
 };
 
 export const QualificationServices = {

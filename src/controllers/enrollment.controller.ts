@@ -146,7 +146,7 @@ const bulkUpdateDatesHandler = async (req: Request, res: Response) => {
 const removeEnrollmentHandler = async (req: Request, res: Response) => {
   const { classId, studentId } = req.params;
 
-  const result = await EnrollmentServices.removeEnrollment(classId, studentId);
+  const result = await EnrollmentServices.removeEnrollment(classId, studentId, req.user?._id);
 
   SendSuccessResponse.deleted({
     res,

@@ -11,6 +11,7 @@ interface LogActivityOptions {
   before?: Record<string, unknown> | null;
   after?: Record<string, unknown> | null;
   description?: string;
+  undoable?: boolean;
 }
 
 export const logActivity = async (options: LogActivityOptions): Promise<void> => {

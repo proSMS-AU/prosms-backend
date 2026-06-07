@@ -20,7 +20,7 @@ const getActivityLogHandler = async (req: Request, res: Response) => {
 };
 
 const undoActivityHandler = async (req: Request, res: Response) => {
-  const result = await UndoService.undoActivity(req.params.logId, req.user!.organizationId as string);
+  const result = await UndoService.undoActivity(req.params.logId, req.user!.organizationId as string, req.user?._id);
   SendSuccessResponse.success({ res, message: "Action undone successfully", data: result });
 };
 

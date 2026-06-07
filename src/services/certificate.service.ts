@@ -28,6 +28,7 @@ import { mergePDFs } from "../utils/pdfMerger";
 import { chunkUnitsToPlaceholders, calculatePagesNeeded } from "../utils/unitChunker";
 import { generateSequentialId } from "../utils/sequentialIdGenerator";
 import { EnrollmentsT } from "../schemas/class.schema";
+import { logActivity } from "../utils/activityLogger";
 import { QualificationModel } from "../model/qualification.model";
 
 const tempDir = path.join(__dirname, "../temp");
@@ -863,12 +864,14 @@ const sendCertificateToStudentEmail = async ({ email, certificateId }: { email: 
   return { url: isCertificateExist.certificateKey };
 };
 
-const deleteCertificate = async (id: string) => {
+const deleteCertificate = async (id: string, actorUserId?: string) => {
   const certificate = await CertificateModel.findById(id);
 
   if (!certificate) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Certificate not found");
   }
+
+  const certificateSnapshot = certificate.toObject() as unknown as Record<string, unknown>;
 
   // Remove from enrollment
   const updateResult = await ClassModel.updateOne(
@@ -893,6 +896,20 @@ const deleteCertificate = async (id: string) => {
 
   // Delete certificate record
   await CertificateModel.findByIdAndDelete(id);
+
+  // Logged for audit only. Not undoable: the PDF is permanently removed from R2
+  // storage above, so restoring the DB record would leave a broken certificate.
+  logActivity({
+    organizationId: String(certificate.organizationId),
+    actorUserId,
+    entityType: "certificate",
+    entityId: String(certificate._id),
+    entityLabel: certificate.certificateShortId ?? String(certificate._id),
+    action: "delete",
+    before: certificateSnapshot,
+    undoable: false,
+    description: "Certificate PDF permanently removed from storage — re-issue to recreate"
+  });
 };
 
 // E-01: Generate certificates for a single student across multiple class enrollments

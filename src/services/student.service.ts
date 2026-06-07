@@ -443,7 +443,8 @@ const deleteStudent = async (studentId: string, actorUserId?: string) => {
     entityType: "student",
     entityId: String(student._id),
     entityLabel: `${student.personalInfo?.givenName ?? ""} ${student.personalInfo?.surname ?? ""}`.trim(),
-    action: "delete"
+    action: "delete",
+    undoable: true
   });
 };
 

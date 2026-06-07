@@ -48,7 +48,7 @@ const updateTrainerHandler = async (req: Request, res: Response) => {
 };
 
 const deleteTrainerHandler = async (req: Request, res: Response) => {
-  await TrainerServices.deleteTrainer(req.params.id);
+  await TrainerServices.deleteTrainer(req.params.id, req.user?._id);
   SendSuccessResponse.deleted({
     res,
     message: "Trainer deleted successfully!",

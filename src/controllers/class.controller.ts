@@ -60,7 +60,7 @@ const deleteUnitsFromClassEnrollmentHandler = async (req: Request, res: Response
 };
 
 const deleteClassHandler = async (req: Request, res: Response) => {
-  await ClassServices.deleteClass(req.params.id);
+  await ClassServices.deleteClass(req.params.id, req.user?._id);
   SendSuccessResponse.deleted({
     res,
     message: "Class deleted successfully!",

@@ -167,7 +167,7 @@ const updateQualificationWithUnitsHandler = async (req: Request, res: Response, 
 };
 
 const deleteQualificationHandler = async (req: Request, res: Response) => {
-  await QualificationServices.deleteQualification(req.params.id);
+  await QualificationServices.deleteQualification(req.params.id, req.user?._id);
   return SendSuccessResponse.deleted({
     res,
     message: "Qualification deleted successfully",

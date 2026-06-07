@@ -60,6 +60,17 @@ const getGeneratedSSIDHandler = async (req: Request, res: Response) => {
   });
 };
 
+const updateGeneratedSSIDHandler = async (req: Request, res: Response) => {
+  const { organizationId } = req.params;
+  const { ssid } = req.body as { ssid?: string };
+  const result = await usiService.updateGeneratedSSID(organizationId, ssid ?? "");
+  SendSuccessResponse.success({
+    res,
+    message: "SSID updated successfully",
+    data: result
+  });
+};
+
 const getSSIDStatusHandler = async (req: Request, res: Response) => {
   const { organizationId } = req.params;
   const usiServiceResponse = await usiService.getSSIDStatus(organizationId);
@@ -193,6 +204,7 @@ export const usiControllers = {
   generateAndEmailSSIDHandler,
   resendSSIDEmailHandler,
   getGeneratedSSIDHandler,
+  updateGeneratedSSIDHandler,
   getSSIDStatusHandler,
   updateSSIDRequestStatusHandler,
   configureRTOForUSIHandler,

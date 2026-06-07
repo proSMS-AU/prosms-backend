@@ -6,6 +6,7 @@ import { AddClassT, DeleteUnitsFromClassEnrollmentT } from "../schemas/class.sch
 import { AppError } from "../utils/appError";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { StudentModel } from "../model/student.model";
+import { logActivity } from "../utils/activityLogger";
 
 // Status meaning "no work done yet" — only such units are safe to drop when a
 // unit is removed from a class that already has enrolled students.
@@ -377,11 +378,22 @@ const deleteUnitsFromClassEnrollment = async (data: DeleteUnitsFromClassEnrollme
   return updatedClass;
 };
 
-const deleteClass = async (classId: string) => {
+const deleteClass = async (classId: string, actorUserId?: string) => {
   const cls = await ClassModel.findByIdAndDelete(classId);
   if (!cls) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
   }
+
+  logActivity({
+    organizationId: String(cls.organizationId),
+    actorUserId,
+    entityType: "class",
+    entityId: String(cls._id),
+    entityLabel: cls.classDetails?.classTitle ?? String(cls._id),
+    action: "delete",
+    before: cls.toObject() as unknown as Record<string, unknown>,
+    undoable: true
+  });
 };
 
 const getCertificateGeneratedClasses = async (query: Record<string, string>, organizationId: string) => {

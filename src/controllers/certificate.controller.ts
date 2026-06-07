@@ -98,7 +98,7 @@ const bulkGenerateCertificatesHandler = async (req: Request, res: Response) => {
 };
 
 const deleteCertificate = async (req: Request, res: Response) => {
-  await CertificateServices.deleteCertificate(req.params.id);
+  await CertificateServices.deleteCertificate(req.params.id, req.user?._id);
   SendSuccessResponse.deleted({
     res,
     message: "Certificate deleted successfully!",

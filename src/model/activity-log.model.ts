@@ -49,6 +49,19 @@ export class ActivityLog {
   @Prop({ type: String, required: false })
   description?: string;
 
+  // Whether this entry can be undone (delete actions on reversible entities).
+  // Non-reversible deletes (certificate/invoice — file removed from storage) set this false.
+  @Prop({ type: Boolean, required: false, default: false })
+  undoable?: boolean;
+
+  // Append-only: set when the action is undone. The log entry itself is never deleted.
+  @Prop({ type: Date, required: false, default: null })
+  undoneAt?: Date | null;
+
+  // Records who performed the undo (may differ from the original actor).
+  @Prop({ type: String, required: false })
+  undoneByUserId?: string;
+
   // Auto-added by timestamps: true
   createdAt?: Date;
   updatedAt?: Date;

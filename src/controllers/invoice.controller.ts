@@ -102,7 +102,7 @@ const viewInvoiceHandler = async (req: Request, res: Response) => {
 };
 
 const deleteInvoiceByIdHandler = async (req: Request, res: Response) => {
-  const result = await InvoiceServices.deleteInvoiceById(req.params.id);
+  const result = await InvoiceServices.deleteInvoiceById(req.params.id, req.user?._id);
   SendSuccessResponse.deleted({
     res,
     message: "Invoice deleted successfully!",

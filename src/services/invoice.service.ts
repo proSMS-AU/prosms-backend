@@ -8,6 +8,7 @@ import { AppError } from "../utils/appError";
 import { DATA_NOT_FOUND, httpStatus, invoiceTypes } from "../constants";
 import { CloudflareService } from "./cloudflare.service";
 import { logger } from "../utils";
+import { logActivity } from "../utils/activityLogger";
 import { mergePDFs } from "../utils/pdfMerger";
 import { chunkInvoiceItems, itemsToPlaceholders, calculateInvoiceTotals } from "../utils/invoiceHelpers";
 // Reuse from certificate service
@@ -426,12 +427,29 @@ const getInvoiceById = async (id: string) => {
   return invoice;
 };
 
-const deleteInvoiceById = async (invoiceId: string) => {
+const deleteInvoiceById = async (invoiceId: string, actorUserId?: string) => {
   const invoice = await InvoiceModel.findByIdAndDelete(invoiceId);
   if (!invoice) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Invoice not found");
   }
+  const invoiceSnapshot = invoice.toObject() as unknown as Record<string, unknown>;
   await CloudflareService.deleteFileFromR2(invoice.invoiceKey);
+
+  // Logged for audit only. Not undoable: the PDF is removed from R2 storage above.
+  if (invoice.organizationId) {
+    logActivity({
+      organizationId: String(invoice.organizationId),
+      actorUserId,
+      entityType: "invoice",
+      entityId: String(invoice._id),
+      entityLabel: invoice.invoiceId ?? String(invoice._id),
+      action: "delete",
+      before: invoiceSnapshot,
+      undoable: false,
+      description: "Invoice PDF permanently removed from storage — recreate to restore"
+    });
+  }
+
   return invoice;
 };
 

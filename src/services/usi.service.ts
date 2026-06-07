@@ -319,6 +319,46 @@ const getGeneratedSSID = async (organizationId: string): Promise<{ ssid: string 
   return { ssid: organization.usiConfig?.ssidInfo?.ssid ?? null };
 };
 
+// Org-admin editable SSID. Lets the RTO admin set/correct their own SSID value
+// (e.g. when it was issued out-of-band or entered wrong). Creates the usiConfig
+// shell if it doesn't exist yet, mirroring the super-admin generate path.
+const updateGeneratedSSID = async (organizationId: string, ssid: string): Promise<{ ssid: string }> => {
+  const trimmed = (ssid ?? "").trim();
+  if (!trimmed) {
+    throw new AppError(httpStatus.BAD_REQUEST, BAD_REQUEST.code, "SSID cannot be empty.");
+  }
+
+  const organization = await OrganizationModel.findById(organizationId);
+  if (!organization) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
+  }
+
+  if (organization.usiConfig) {
+    organization.usiConfig.ssidInfo = { ssid: trimmed, timestamp: Date.now() };
+  } else {
+    organization.usiConfig = {
+      ABN: organization.ABN,
+      orgCode: organization.rtoId,
+      ssidInfo: { ssid: trimmed, timestamp: Date.now() },
+      ramRelationshipStatus: "pending",
+      ramAuthorizationDate: undefined,
+      ramExpiryDate: undefined,
+      totalUSIVerifications: 0,
+      monthlyUSIVerifications: [],
+      configurationDate: undefined,
+      configurationStatus: "configuration_pending",
+      configurationExpiryDate: undefined,
+      lastVerificationDate: undefined,
+      lastVerificationStatus: undefined
+    };
+  }
+
+  organization.markModified("usiConfig");
+  await organization.save();
+
+  return { ssid: trimmed };
+};
+
 const getSSIDStatus = async (organizationId: string): Promise<{ status: "not_generated" | "generated" }> => {
   const organization = await OrganizationModel.findById(organizationId);
   if (!organization) {
@@ -714,6 +754,7 @@ export const usiService = {
   generateAndEmailSSID,
   resendSSIDEmailToAdmin,
   getGeneratedSSID,
+  updateGeneratedSSID,
   getSSIDStatus,
   updateSSIDRequestStatus,
   configureRTOForUSI,

@@ -203,7 +203,7 @@ const addEnrollmentWithNotify = async (enrollmentData: EnrollmentWithNotifyT) =>
   return classData;
 };
 
-const removeEnrollment = async (classId: string, studentId: string) => {
+const removeEnrollment = async (classId: string, studentId: string, actorUserId?: string) => {
   const classData = await ClassModel.findById(classId);
 
   if (!classData) {
@@ -235,16 +235,25 @@ const removeEnrollment = async (classId: string, studentId: string) => {
     );
   }
 
+  // Snapshot the enrollment sub-document before removal so undo can re-push it.
+  const enrollmentSnapshot =
+    typeof (enrollment as unknown as { toObject?: () => unknown }).toObject === "function"
+      ? (enrollment as unknown as { toObject: () => unknown }).toObject()
+      : enrollment;
+
   classData.enrollments.splice(enrollmentIndex, 1);
   await classData.save();
 
   logActivity({
     organizationId: String(classData.organizationId),
+    actorUserId,
     entityType: "enrollment",
     entityId: String(classData._id),
     entityLabel: enrollment.studentInfo.name,
     action: "unenroll",
-    description: `Removed from class "${classData.classDetails.classTitle}"`
+    description: `Removed from class "${classData.classDetails.classTitle}"`,
+    before: { studentId, classId, enrollment: enrollmentSnapshot } as Record<string, unknown>,
+    undoable: true
   });
 
   return classData;

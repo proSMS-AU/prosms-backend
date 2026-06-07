@@ -1,6 +1,7 @@
 import { AddTrainerT, UpdateTrainerT } from "../schemas/trainer.schema";
 import { TrainerModel } from "../model/trainer.model";
 import { QueryBuilder } from "../utils/queryBuilder";
+import { logActivity } from "../utils/activityLogger";
 import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus } from "../constants";
 import { AppError } from "../utils/appError";
 import { flattenUpdate } from "./student.service";
@@ -88,7 +89,7 @@ const updateTrainer = async (trainerId: string, data: UpdateTrainerT) => {
   return trainer;
 };
 
-const deleteTrainer = async (trainerId: string) => {
+const deleteTrainer = async (trainerId: string, actorUserId?: string) => {
   // Prevent deletion if trainer is assigned
   const assignedClasses = await ClassModel.countDocuments({
     $or: [{ "classDetails.defaultTrainer": trainerId }, { "classDetails.additionalTrainer": trainerId }]
@@ -102,6 +103,17 @@ const deleteTrainer = async (trainerId: string) => {
   if (!trainer) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
   }
+
+  logActivity({
+    organizationId: String(trainer.organizationId),
+    actorUserId,
+    entityType: "trainer",
+    entityId: String(trainer._id),
+    entityLabel: `${trainer.personalInfo?.givenName ?? ""} ${trainer.personalInfo?.surname ?? ""}`.trim(),
+    action: "delete",
+    before: trainer.toObject() as unknown as Record<string, unknown>,
+    undoable: true
+  });
 };
 
 export const TrainerServices = {
