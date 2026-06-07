@@ -1,20 +1,12 @@
 import { hashPassword } from "better-auth/crypto";
 import argon2 from "argon2";
-import { randomBytes } from "crypto";
+import { ObjectId } from "mongodb";
 import { getMongoDb } from "./db-connection";
 import { logger } from "./logger";
 
 const SUPER_ADMIN_EMAIL = "prosms.au@gmail.com";
 const SUPER_ADMIN_PASSWORD = "Pr0@%20SmS2026";
 const SUPER_ADMIN_NAME = "Super Admin";
-
-const generateId = (): string => {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const bytes = randomBytes(32);
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("");
-};
 
 export const seedSuperAdmin = async (): Promise<void> => {
   const db = getMongoDb();
@@ -32,10 +24,10 @@ export const seedSuperAdmin = async (): Promise<void> => {
       logger.info("[Seed] Super admin user already exists, skipping user/account");
     } else {
       logger.info("[Seed] Creating super admin (better-auth user + account)...");
-      const userId = generateId();
+      const userId = new ObjectId();
 
       await db.collection("user").insertOne({
-        _id: userId as unknown as never,
+        _id: userId,
         name: SUPER_ADMIN_NAME,
         email: SUPER_ADMIN_EMAIL,
         emailVerified: true,
@@ -49,7 +41,7 @@ export const seedSuperAdmin = async (): Promise<void> => {
       const hashedPassword = await hashPassword(SUPER_ADMIN_PASSWORD);
 
       await db.collection("account").insertOne({
-        _id: generateId() as unknown as never,
+        _id: new ObjectId(),
         userId,
         accountId: SUPER_ADMIN_EMAIL,
         providerId: "credential",

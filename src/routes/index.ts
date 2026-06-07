@@ -26,6 +26,7 @@ import avetmissRoutes from "./avetmiss.route";
 import specificFundingIdentifierRouter from "./specificFundingIdentifier.route";
 import activityLogRouter from "./activityLog.route";
 import twoFactorRouter from "./twoFactor.route";
+import referenceDataRouter from "./referenceData.route";
 const router = express.Router();
 
 const PROJECT_NAME: string = config.get<string>("server.projectName") || "Pro SMS";
@@ -46,6 +47,9 @@ router.use("/certificate/verify", certificateRouter);
 router.use("/certificate/file", certificateRouter);
 router.use("/invoice/file", invoiceRouter);
 router.use("/qualification/verify-abn", qualificationRouter);
+// Static AVETMISS classification data (SACC countries / ASCL languages). Non-sensitive and
+// needed by the pre-session onboarding form, so served without sessionValidator.
+router.use("/reference-data", referenceDataRouter);
 
 // authenticated routes
 router.use("/organization", sessionValidator(), organizationRouter);

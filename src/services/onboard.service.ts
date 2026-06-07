@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import jwt from "jsonwebtoken";
 import config from "config";
-import { randomBytes } from "crypto";
+import { ObjectId } from "mongodb";
 import { hashPassword } from "better-auth/crypto";
 import { sendEmail } from "../utils/sendEmail";
 import { RegisterOrganizationInput, SendOnboardUrlInput, TokenPayload } from "../schemas/super-admin/onboard.schema";
@@ -12,15 +12,6 @@ import mongoose from "mongoose";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, httpStatus } from "../constants";
 import { CloudflareService } from "./cloudflare.service";
-
-// Random string id matching the format used for the seeded super admin (better-auth ids).
-const generateAuthId = (): string => {
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const bytes = randomBytes(32);
-  return Array.from(bytes)
-    .map((b) => chars[b % chars.length])
-    .join("");
-};
 
 // generate onboard token
 const generateOnboardToken = (data: SendOnboardUrlInput) => {
@@ -195,12 +186,12 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
     // Created server-side here (instead of a public sign-up call) so verification is
     // tied to the onboard token and stays atomic with the organization.
     const now = new Date();
-    const userId = generateAuthId();
+    const userId = new ObjectId();
     const hashedPassword = await hashPassword(data.auth.password);
 
     await db!.collection("user").insertOne(
       {
-        _id: userId as unknown as never,
+        _id: userId,
         name: data.auth.name,
         email: data.auth.email,
         emailVerified: true,
@@ -215,7 +206,7 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
 
     await db!.collection("account").insertOne(
       {
-        _id: generateAuthId() as unknown as never,
+        _id: new ObjectId(),
         userId,
         accountId: data.auth.email,
         providerId: "credential",

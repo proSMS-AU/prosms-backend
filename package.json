@@ -22,13 +22,7 @@
     "format:check": "prettier --check .",
     "format": "prettier --write .",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "prepare": "husky",
-    "migrate:dry": "ts-node src/utils/migrations/001-fund-source-slug-to-code.ts",
-    "migrate:commit": "ts-node src/utils/migrations/001-fund-source-slug-to-code.ts --commit",
-    "migrate:002:dry": "ts-node src/utils/migrations/002-funding-source-class-to-student.ts",
-    "migrate:002:commit": "ts-node src/utils/migrations/002-funding-source-class-to-student.ts --commit",
-    "migrate:003:dry": "ts-node src/utils/migrations/003-osca-student-to-qualification.ts",
-    "migrate:003:commit": "ts-node src/utils/migrations/003-osca-student-to-qualification.ts --commit"
+    "prepare": "husky"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",

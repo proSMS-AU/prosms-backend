@@ -12,7 +12,7 @@ import { UnitModel } from "../model/unit.model";
 import { CloudflareService } from "./cloudflare.service";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, DATA_NOT_FOUND, httpStatus, UNIT_COMPETENCY_MAP } from "../constants";
-import { VALID_ASCL_LANGUAGE_CODES } from "../constants/ascl-languages.constant";
+import { resolveCountryCode, resolveLanguageCode } from "./referenceData.service";
 import { AvetmissReportModel } from "../model/avetmiss-report.model";
 import { DeliveryLocationModel } from "../model/delivery-location.model";
 import { GenerateAvetmissReportT } from "../schemas/avetmiss-report.schema";
@@ -380,50 +380,25 @@ const getFundingSourceNationalCode = (value: string | undefined): string => {
   );
 };
 
+// NAT00080 Language Identifier (pos 87) — resolves a stored code OR name (any ASCL variant)
+// to its 4-digit code via the shared reference-data service (single source of truth).
+// Unknown/unresolved values report "@@@@" (not stated) so the NAT file stays valid (#3726).
 const getLanguageIdentifierCode = (value: string | undefined): string => {
-  const raw = (value ?? "").trim();
-  if (!raw || raw.toUpperCase() === "@@@@") return "@@@@";
-
-  const direct = raw.match(/^\d{4}$/)?.[0];
-  if (direct) {
-    // Only emit codes that exist in the official ASCL classification; anything else is
-    // reported as "@@@@" (not stated) so the NAT file stays valid (NCVER error #3726).
-    if (VALID_ASCL_LANGUAGE_CODES.has(direct)) return direct;
-    console.warn(`[AVETMISS] NAT00080: unrecognised language code "${direct}" → reported as @@@@.`);
-    return "@@@@";
+  const code = resolveLanguageCode(value);
+  if (code === "@@@@" && (value ?? "").trim()) {
+    console.warn(`[AVETMISS] NAT00080: unrecognised language "${value}" → reported as @@@@.`);
   }
-
-  const normalized = raw.toLowerCase();
-  const map: Record<string, string> = {
-    "en-english": "1201",
-    english: "1201",
-    "english only": "1201"
-  };
-
-  return map[normalized] ?? "@@@@";
+  return code;
 };
 
+// NAT00080 Country Identifier (pos 93) — resolves a stored code OR name (any SACC variant)
+// to its 4-digit code via the shared reference-data service. Unknown values → "@@@@".
 const getCountryIdentifierCode = (value: string | undefined): string => {
-  const raw = (value ?? "").trim();
-  if (!raw) return "@@@@";
-
-  const direct = raw.match(/^\d{4}$/)?.[0];
-  if (direct) return direct;
-
-  const normalized = raw.toLowerCase();
-  const map: Record<string, string> = {
-    australia: "1101",
-    "new zealand": "1201",
-    "united kingdom": "2102",
-    china: "6101",
-    india: "7103",
-    philippines: "5202",
-    vietnam: "5105",
-    "not stated": "@@@@",
-    other: "0000"
-  };
-
-  return map[normalized] ?? "@@@@";
+  const code = resolveCountryCode(value);
+  if (code === "@@@@" && (value ?? "").trim()) {
+    console.warn(`[AVETMISS] NAT00080: unrecognised country "${value}" → reported as @@@@.`);
+  }
+  return code;
 };
 
 const getStudyReasonCode = (value: string | undefined): string => {
