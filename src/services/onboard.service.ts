@@ -11,6 +11,7 @@ import { UnitModel } from "../model/unit.model";
 import mongoose from "mongoose";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, httpStatus } from "../constants";
+import { TGAService } from "./tga.service";
 
 // generate onboard token
 const generateOnboardToken = (data: SendOnboardUrlInput) => {
@@ -130,6 +131,33 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
     throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "An account with this email already exists");
   }
 
+  // ========== HYDRATE QUALIFICATIONS & UNITS FROM training.gov ==========
+  // The client no longer ships the (potentially multi-MB) scope in the request
+  // body. We re-fetch it here by RTO so the payload stays tiny no matter how
+  // large the RTO is. Done OUTSIDE the transaction — these are slow network
+  // calls and must not hold a Mongo transaction open.
+  const scope = await TGAService.findQualificationsAndUnitsOfOrganisation(data.organization.rtoId);
+  const scopeQualifications: any[] = scope?.qualifications ?? [];
+  const unitsNotAttached: any[] = scope?.unitsNotAttachedToQualifications ?? [];
+
+  // Flatten into the per-unit shape the persistence step expects: units attached
+  // to a qualification carry that qualification's code; standalone units get a
+  // synthetic "NA-" code so they are stored without a qualification link.
+  const scopeUnits: any[] = [
+    ...scopeQualifications.flatMap((q: any) =>
+      (q.units ?? []).map((u: any) => ({
+        ...u,
+        qualificationCode: q.code,
+        unitType: u.isEssentialLabel === "Core" ? "Core" : "Elective"
+      }))
+    ),
+    ...unitsNotAttached.map((u: any, index: number) => ({
+      ...u,
+      qualificationCode: `NA-${u.code}${index + 1}`,
+      unitType: u.isEssentialLabel === "Core" ? "Core" : "Elective"
+    }))
+  ];
+
   // TRANSACTION
   const session = await mongoose.startSession();
   session.startTransaction();
@@ -141,9 +169,9 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
 
     // Create Qualifications with organizationId
     let qualifications: any[] = [];
-    if (data.qualifications && data.qualifications.length > 0) {
+    if (scopeQualifications.length > 0) {
       qualifications = await QualificationModel.insertMany(
-        data.qualifications.map((q) => ({
+        scopeQualifications.map((q) => ({
           ...q,
           organizationId: org._id
         })),
@@ -156,8 +184,8 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
 
     // Create Units with organizationId and mapped qualificationId
     let units: any[] = [];
-    if (data.units && data.units.length > 0) {
-      const unitsToInsert = data.units.map((u) => {
+    if (scopeUnits.length > 0) {
+      const unitsToInsert = scopeUnits.map((u) => {
         // Check if unit is not attached to any qualification (qualificationCode starts with "NA-")
         const isStandalone = u.qualificationCode?.startsWith("NA-");
 

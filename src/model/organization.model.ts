@@ -103,6 +103,14 @@ export class Organization {
 
   @Prop({ type: () => USIConfiguration, _id: false })
   usiConfig?: USIConfiguration;
+
+  // Soft delete: when an org is "deleted" by a super admin we keep the record
+  // (and all its compliance data) but flag it so it disappears from lists/stats.
+  @Prop({ type: Boolean, default: false })
+  isDeleted?: boolean;
+
+  @Prop({ type: Date })
+  deletedAt?: Date;
 }
 
 export const OrganizationModel = getModelForClass(Organization);

@@ -38,8 +38,12 @@ export const AuthSchema = z.object({
 export const RegisterOrganizationSchema = object({
   organization: OrganizationSchema,
   auth: AuthSchema,
-  qualifications: array(QualificationSchema),
-  units: array(UnitSchema)
+  // Qualifications & units are NOT sent by the client anymore. The server
+  // hydrates them from training.gov by RTO at register time, so the request
+  // body stays small regardless of how large the RTO's scope is. Kept optional
+  // for backward compatibility with any older client build.
+  qualifications: array(QualificationSchema).optional(),
+  units: array(UnitSchema).optional()
 });
 
 export const RegisterOrganizationCreateRequestSchema = object({
@@ -92,13 +96,14 @@ export interface RegisterOrganizationInput {
     password: string;
     name: string;
   };
-  qualifications: Array<{
+  // Optional & unused for new clients — server hydrates these from training.gov.
+  qualifications?: Array<{
     code: string;
     title: string;
     status: string;
     latestReleaseInfo?: any;
   }>;
-  units: Array<{
+  units?: Array<{
     qualificationCode: any;
     code: string;
     title: string;

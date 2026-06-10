@@ -55,10 +55,20 @@ const updateOrganizationHandler = async (req: Request, res: Response) => {
   });
 };
 
+const deleteOrganizationHandler = async (req: Request, res: Response) => {
+  const result = await OrganizationServices.softDeleteOrganization(req.params.id);
+  SendSuccessResponse.success({
+    res,
+    message: "Organization deleted successfully!",
+    data: result
+  });
+};
+
 export const organizationControllers = {
   getAllOrganizationsHandler,
   getOrganizationHandler,
   getOrganizationByIdHandler,
   getOrganizationStatsHandler,
-  updateOrganizationHandler
+  updateOrganizationHandler,
+  deleteOrganizationHandler
 };

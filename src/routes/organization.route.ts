@@ -18,6 +18,8 @@ router.get("/:id", asyncWrapper(organizationControllers.getOrganizationByIdHandl
 
 router.patch("/:id", asyncWrapper(organizationControllers.updateOrganizationHandler));
 
+router.delete("/:id", asyncWrapper(organizationControllers.deleteOrganizationHandler));
+
 router.post(
   "/:orgId/import-nat",
   natUpload.fields([{ name: "zip", maxCount: 1 }]),
