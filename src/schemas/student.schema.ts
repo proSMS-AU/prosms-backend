@@ -226,7 +226,8 @@ export const StudentSchema = object({
   // AVETMISS reporting flags
   doNotReportAvetmiss: boolean().optional(),
   isApprentice: boolean().optional(),
-  fundingSourceNational: string().optional()
+  fundingSourceNational: string().optional(),
+  specificFundingIdentifier: string().optional()
 });
 
 // UPDATE SCHEMA - everything optional (deep partial manually)
@@ -358,7 +359,8 @@ export const UpdateStudentSchema = object({
   // AVETMISS reporting flags
   doNotReportAvetmiss: boolean().optional(),
   isApprentice: boolean().optional(),
-  fundingSourceNational: string().optional()
+  fundingSourceNational: string().optional(),
+  specificFundingIdentifier: string().optional()
 });
 
 export const StudentRequestSchema = object({

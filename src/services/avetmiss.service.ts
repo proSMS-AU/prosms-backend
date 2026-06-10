@@ -1355,7 +1355,7 @@ const generateNAT00120 = async (
         unitCodes.add(unit.code);
 
         const student = await StudentModel.findById(enrollment.studentInfo.id).select(
-          "avetmissId doNotReportAvetmiss fundingSourceNational isApprentice"
+          "avetmissId doNotReportAvetmiss fundingSourceNational specificFundingIdentifier isApprentice"
         );
         const clientId = (student?.avetmissId ?? "").trim();
         if (!clientId) {
@@ -1471,8 +1471,11 @@ const generateNAT00120 = async (
         write(87, 10, padA(apprenticeClientId || (isApprentice ? "@@@@@@@@@@" : ""), 10)); // Pos  87–96 : Client identifier — apprenticeships
         write(97, 2, padA(getStudyReasonCode(enrollment.studyReason), 2)); // Pos  97–98 : Study reason
         write(99, 1, padA(vetInSchools, 1)); // Pos  99    : VET in schools flag
+        // R-12 priority (mirrors R-06 funding override): student-level SFI wins,
+        // then enrollment, then the class default.
+        const studentSFI = ((student as any)?.specificFundingIdentifier ?? "").trim();
         const enrollmentSFI = ((enrollment as any).specificFundingIdentifier ?? "").trim();
-        const effectiveSFI = enrollmentSFI || specificFundingIdentifier;
+        const effectiveSFI = studentSFI || enrollmentSFI || specificFundingIdentifier;
         write(100, 10, padA(effectiveFundNational === "13" || effectiveFundNational === "15" ? effectiveSFI : "", 10)); // Pos 100–109: Specific funding identifier
         write(110, 2, padA("", 2)); // Pos 110–111: School type identifier (blank)
         // Pos 112–114: Outcome identifier — training organisation (optional, blank)

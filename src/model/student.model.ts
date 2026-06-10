@@ -483,6 +483,12 @@ export class Student {
   @Prop({ type: String })
   fundingSourceNational?: string;
 
+  // Specific Funding Identifier at student level (NAT00120 pos 100-109).
+  // Required when fundingSourceNational is "13"/"15"; overrides enrollment/class
+  // SFI the same way fundingSourceNational overrides the class default (R-06/R-12).
+  @Prop({ type: String, maxlength: 10 })
+  specificFundingIdentifier?: string;
+
   // Apprenticeship flag — shows apprenticeship panel in enrolment form (R-19)
   @Prop({ type: Boolean, default: false })
   isApprentice?: boolean;
