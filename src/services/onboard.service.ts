@@ -11,7 +11,6 @@ import { UnitModel } from "../model/unit.model";
 import mongoose from "mongoose";
 import { AppError } from "../utils/appError";
 import { CONFLICT_ERROR, httpStatus } from "../constants";
-import { CloudflareService } from "./cloudflare.service";
 
 // generate onboard token
 const generateOnboardToken = (data: SendOnboardUrlInput) => {
@@ -115,16 +114,11 @@ export const registerOrganization = async (data: RegisterOrganizationInput) => {
     throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "Organization with this ABN already exists");
   }
 
-  // Check if email already exists
+  // Check if email already exists. Do NOT touch the existing organization's
+  // logo here — this is a rejected request, so deleting the existing college's
+  // logo file would corrupt a live organization on a no-op onboarding attempt.
   const existingEmail = await OrganizationModel.findOne({ email: data.organization.email });
   if (existingEmail) {
-    // If organization exists and has a new logo, delete the old one
-    if (existingEmail.logoUrl && data.organization.logoUrl && existingEmail.logoUrl !== data.organization.logoUrl) {
-      const oldLogoKey = CloudflareService.extractKeyFromUrl(existingEmail.logoUrl);
-      if (oldLogoKey) {
-        await CloudflareService.deleteFileFromR2(oldLogoKey);
-      }
-    }
     throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "Organization with this email already exists");
   }
 
