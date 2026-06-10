@@ -33,7 +33,8 @@ export const GenerateManualInvoiceRequestSchema = z.object({
     createdBy: z.string().min(1, "Created by is required"),
     invoiceDate: z.string().min(1, "Invoice date is required"),
     dueDate: z.string().min(1, "Due date is required"),
-    purchaseOrder: z.string().min(1, "Purchase order is required"),
+    // Optional — defaults to "N/A" in the service when blank/omitted.
+    purchaseOrder: z.string().trim().optional(),
     name: z.string().min(1, "Name is required"),
     address: z.string().min(1, "Address is required"),
     town: z.string().min(1, "Town is required"),

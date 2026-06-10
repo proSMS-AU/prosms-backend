@@ -160,7 +160,7 @@ const generateManualInvoice = async (data: GenerateManualInvoiceRequestT, organi
       inv_date: data.invoiceDate,
       due_date: data.dueDate,
       inv_no: invoiceId,
-      p_order: data.purchaseOrder,
+      p_order: data.purchaseOrder?.trim() || "N/A",
       name: data.name,
       address: data.address,
       town: data.town,
