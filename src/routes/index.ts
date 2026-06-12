@@ -27,6 +27,7 @@ import specificFundingIdentifierRouter from "./specificFundingIdentifier.route";
 import activityLogRouter from "./activityLog.route";
 import twoFactorRouter from "./twoFactor.route";
 import referenceDataRouter from "./referenceData.route";
+import bankingSettingsRouter from "./bankingSettings.route";
 const router = express.Router();
 
 const PROJECT_NAME: string = config.get<string>("server.projectName") || "Pro SMS";
@@ -71,5 +72,6 @@ router.use("/delivery-location", sessionValidator(), deliveryLocationRouter);
 router.use("/specific-funding-identifier", sessionValidator(), specificFundingIdentifierRouter);
 router.use("/activity-log", sessionValidator(), activityLogRouter);
 router.use("/auth/2fa", sessionValidator(), twoFactorRouter);
+router.use("/banking-settings", sessionValidator(), bankingSettingsRouter);
 
 export default router;

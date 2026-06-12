@@ -25,6 +25,7 @@ import { generateSequentialId } from "../utils/sequentialIdGenerator";
 import { QueryBuilder } from "../utils/queryBuilder";
 import { PDFDocument } from "pdf-lib";
 import { AutoInvoiceStudentSnapshotT, GenerateManualInvoiceRequestT } from "../schemas/invoice.schema";
+import { BankingSettingsService } from "./banking-settings.service";
 
 const execAsync = promisify(exec);
 const tempDir = path.join(__dirname, "../temp");
@@ -310,6 +311,9 @@ const generateAutoInvoice = async (
   const snap = studentSnapshot;
   const addr = student.address?.primaryPostalAddress;
 
+  // Fetch banking details (singleton — never throws, returns empty strings if unset)
+  const banking = await BankingSettingsService.getBankingSettings();
+
   const baseData = {
     inv_date: invoiceDate.toISOString().split("T")[0],
     due_date: dueDate.toISOString().split("T")[0],
@@ -320,6 +324,11 @@ const generateAutoInvoice = async (
     town: snap?.address?.city || addr?.city || "N/A",
     state: snap?.address?.state || addr?.state || "N/A",
     postcode: snap?.address?.postcode || addr?.postCode || "N/A",
+    bank_name: banking?.bankName || "",
+    bsb: banking?.bsb || "",
+    account_number: banking?.accountNumber || "",
+    account_name: banking?.accountName || "",
+    signature: banking?.signature || "",
     ...calculateInvoiceTotals(items)
   };
 
