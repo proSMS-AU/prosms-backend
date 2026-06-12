@@ -55,6 +55,12 @@ export class AvetmissReport {
 
   @Prop()
   destinationState?: string;
+
+  @Prop()
+  fileHash?: string;
+
+  @Prop({ default: false })
+  isNilReturn?: boolean;
 }
 export const AvetmissReportModel = getModelForClass(AvetmissReport);
 

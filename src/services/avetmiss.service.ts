@@ -4,6 +4,7 @@
 /* eslint-disable no-plusplus */
 import archiver from "archiver";
 import { PassThrough } from "stream";
+import { createHash } from "crypto";
 import { OrganizationModel } from "../model/organization.model";
 import { StudentModel } from "../model/student.model";
 import { ClassModel } from "../model/class.model";
@@ -1610,7 +1611,7 @@ const generateAvetmissReport = async (
   organizationId: string,
   userId: string,
   data: GenerateAvetmissReportT
-): Promise<{ reportId: string; reportKey: string; summary: object }> => {
+): Promise<{ reportId: string; reportKey: string; fileHash: string; summary: object }> => {
   const org = await OrganizationModel.findById(organizationId);
   if (!org) throw new AppError(httpStatus.NOT_FOUND, "NOT_FOUND", "Organization not found");
 
@@ -1664,6 +1665,8 @@ const generateAvetmissReport = async (
 
   const nat10 = await generateNAT00010(organizationId);
 
+  const isNilReturn = data.nilReturn === true;
+
   // Merge locationMap (from NAT00120 classes) with all active DeliveryLocations for this org
   const activeDelivLocs = await DeliveryLocationModel.find({ organizationId, isDeleted: { $ne: true } }).lean();
   for (const dl of activeDelivLocs) {
@@ -1678,13 +1681,16 @@ const generateAvetmissReport = async (
     }
   }
   const nat20 = await generateNAT00020(rtoId, Array.from(nat120Result.locationMap.values()));
-  const nat30 = await generateNAT00030(Array.from(nat120Result.qualificationIds));
-  const nat60 = await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
-  const nat80 = await generateNAT00080(Array.from(nat120Result.studentIds), endDate, nat120Result.studentFundingMap);
-  const nat85 = await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
-  const nat90 = await generateNAT00090(Array.from(nat120Result.studentIds));
-  const nat100 = await generateNAT00100(Array.from(nat120Result.studentIds));
-  const nat130 = await generateNAT00130(organizationId, rtoId, startDate, endDate);
+
+  // For Nil Return: only include NAT00010 + NAT00020; all enrolment files are empty.
+  const nat30 = isNilReturn ? "" : await generateNAT00030(Array.from(nat120Result.qualificationIds));
+  const nat60 = isNilReturn ? "" : await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
+  const nat80 = isNilReturn ? "" : await generateNAT00080(Array.from(nat120Result.studentIds), endDate, nat120Result.studentFundingMap);
+  const nat85 = isNilReturn ? "" : await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
+  const nat90 = isNilReturn ? "" : await generateNAT00090(Array.from(nat120Result.studentIds));
+  const nat100 = isNilReturn ? "" : await generateNAT00100(Array.from(nat120Result.studentIds));
+  const nat120Content = isNilReturn ? "" : nat120Result.content;
+  const nat130 = isNilReturn ? "" : await generateNAT00130(organizationId, rtoId, startDate, endDate);
 
   const zipBuffer = await new Promise<Buffer>((resolve, reject) => {
     const archive = archiver("zip", { zlib: { level: 9 } });
@@ -1697,19 +1703,18 @@ const generateAvetmissReport = async (
     archive.pipe(passThrough);
     archive.append(nat10, { name: "NAT00010.txt" });
     archive.append(nat20, { name: "NAT00020.txt" });
-    archive.append(nat30, { name: "NAT00030A.txt" });
-    archive.append(nat60, { name: "NAT00060.txt" });
-    archive.append(nat80, { name: "NAT00080.txt" });
-    archive.append(nat85, { name: "NAT00085.txt" });
-    archive.append(nat90, { name: "NAT00090.txt" });
-    // NAT00100 may be empty (no students with prior achievements) — append empty string
-    // is fine; archiver will create a 0-byte file in the zip which NCVER accepts.
-    // We use a Buffer to guarantee the entry is created even when content is "".
+    archive.append(Buffer.from(nat30, "utf8"), { name: "NAT00030A.txt" });
+    archive.append(Buffer.from(nat60, "utf8"), { name: "NAT00060.txt" });
+    archive.append(Buffer.from(nat80, "utf8"), { name: "NAT00080.txt" });
+    archive.append(Buffer.from(nat85, "utf8"), { name: "NAT00085.txt" });
+    archive.append(Buffer.from(nat90, "utf8"), { name: "NAT00090.txt" });
     archive.append(Buffer.from(nat100, "utf8"), { name: "NAT00100.txt" });
-    archive.append(nat120Result.content, { name: "NAT00120.txt" });
-    archive.append(nat130, { name: "NAT00130.txt" });
+    archive.append(Buffer.from(nat120Content, "utf8"), { name: "NAT00120.txt" });
+    archive.append(Buffer.from(nat130, "utf8"), { name: "NAT00130.txt" });
     archive.finalize();
   });
+
+  const fileHash = createHash("sha256").update(zipBuffer).digest("hex");
 
   const uploadResult = await CloudflareService.uploadBufferToR2(zipBuffer, fileName, "avetmiss-reports", false, true);
   if (!uploadResult.success) {
@@ -1732,10 +1737,12 @@ const generateAvetmissReport = async (
       periodLabel: data.periodLabel ?? `${from} to ${to}`,
       reportKey,
       generatedBy: userId,
-      totalStudents: nat120Result.studentIds.size,
-      totalEnrolments: (nat120Result.content.match(/\n/g) ?? []).length,
-      totalCompletions: (nat130.match(/\n/g) ?? []).length,
-      status: "completed"
+      totalStudents: isNilReturn ? 0 : nat120Result.studentIds.size,
+      totalEnrolments: isNilReturn ? 0 : (nat120Content.match(/\n/g) ?? []).length,
+      totalCompletions: isNilReturn ? 0 : (nat130.match(/\n/g) ?? []).length,
+      status: "completed",
+      fileHash,
+      isNilReturn
     });
   } catch (err: any) {
     if (err?.code === 11000 && err?.keyPattern?.reportId) {
@@ -1747,10 +1754,12 @@ const generateAvetmissReport = async (
   return {
     reportId: report._id.toString(),
     reportKey,
+    fileHash,
     summary: {
-      totalStudents: nat120Result.studentIds.size,
-      totalEnrolments: (nat120Result.content.match(/\n/g) ?? []).length,
-      totalCompletions: (nat130.match(/\n/g) ?? []).length
+      totalStudents: isNilReturn ? 0 : nat120Result.studentIds.size,
+      totalEnrolments: isNilReturn ? 0 : (nat120Content.match(/\n/g) ?? []).length,
+      totalCompletions: isNilReturn ? 0 : (nat130.match(/\n/g) ?? []).length,
+      isNilReturn
     }
   };
 };

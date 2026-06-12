@@ -6,7 +6,8 @@ export const GenerateAvetmissReportSchema = object({
   periodLabel: string().optional(),
   destination: zenum(["NCVER", "STA"]),
   destinationState: string().optional(),
-  force: boolean().optional()
+  force: boolean().optional(),
+  nilReturn: boolean().optional()
 });
 export const GenerateAvetmissReportRequestSchema = object({
   body: GenerateAvetmissReportSchema,
