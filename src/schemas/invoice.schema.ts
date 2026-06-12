@@ -3,15 +3,17 @@ import { z, string, object, array, number } from "zod";
 export const AutoInvoiceStudentSnapshot = object({
   id: string().min(1, "Student ID is required"),
   name: string().min(1, "Student name is required"),
-  email: string().min(1, "Student email is required"),
-  phone: string().min(1, "Student phone is required"),
+  // Imported students may have no email or phone — make them optional.
+  email: string().optional(),
+  phone: string().optional(),
   address: object({
-    street: string().min(1, "Street is required"),
-    city: string().min(1, "City is required"),
-    state: string().min(1, "State is required"),
-    postcode: string().min(1, "Postcode is required"),
-    country: string().min(1, "Country is required")
-  })
+    // Imported students often lack a street — default to "N/A" in the service.
+    street: string().optional(),
+    city: string().optional(),
+    state: string().optional(),
+    postcode: string().optional(),
+    country: string().optional()
+  }).optional()
 });
 
 export const GenerateAutoInvoiceRequestSchema = z.object({

@@ -115,6 +115,14 @@ const restoreStudentHandler = async (req: Request, res: Response) => {
   SendSuccessResponse.success({ res, message: "Student restored", data });
 };
 
+const getStudentOptionsHandler = async (req: Request, res: Response) => {
+  const options = await StudentServices.getStudentOptions(
+    req.user?.organizationId as string,
+    req.query.search as string | undefined
+  );
+  SendSuccessResponse.success({ res, message: "Student options retrieved", data: options });
+};
+
 export const StudentController = {
   addNewStudentHandler,
   getAllStudentsHandler,
@@ -126,5 +134,6 @@ export const StudentController = {
   getUniqueLocationsHandler,
   getUniqueStatesHandler,
   getUniqueCountriesHandler,
-  getStudentEnrollmentsHandler
+  getStudentEnrollmentsHandler,
+  getStudentOptionsHandler
 };

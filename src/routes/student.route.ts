@@ -9,6 +9,9 @@ import { StudentController } from "../controllers/student.controller";
 
 const router = Router();
 
+// Lightweight dropdown options — id + name only, no pagination (BEFORE /:id routes)
+router.get("/options", asyncWrapper(StudentController.getStudentOptionsHandler));
+
 // Filter options endpoints (BEFORE /:id routes)
 router.get("/filter-options/locations", asyncWrapper(StudentController.getUniqueLocationsHandler));
 

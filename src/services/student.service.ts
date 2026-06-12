@@ -494,6 +494,32 @@ const restoreStudent = async (studentId: string, organizationId: string) => {
   return student;
 };
 
+// Lightweight list for dropdowns — returns only id + full name, no pagination.
+// Supports optional ?search= for client-side filtering on large orgs.
+const getStudentOptions = async (
+  organizationId: string,
+  search?: string
+): Promise<{ _id: string; fullName: string }[]> => {
+  const filter: Record<string, unknown> = { organizationId, isDeleted: { $ne: true } };
+  if (search?.trim()) {
+    const re = { $regex: search.trim(), $options: "i" };
+    filter.$or = [
+      { "personalInfo.givenName": re },
+      { "personalInfo.surname": re },
+      { "personalInfo.preferredName": re }
+    ];
+  }
+  const docs = await StudentModel.find(filter)
+    .select("personalInfo.givenName personalInfo.surname personalInfo.preferredName")
+    .sort({ "personalInfo.surname": 1, "personalInfo.givenName": 1 })
+    .lean();
+
+  return docs.map((d: any) => ({
+    _id: String(d._id),
+    fullName: `${d.personalInfo?.givenName ?? ""} ${d.personalInfo?.surname ?? ""}`.trim() || "Unknown"
+  }));
+};
+
 export const StudentServices = {
   addNewStudent,
   getAllStudents,
@@ -504,5 +530,6 @@ export const StudentServices = {
   restoreStudent,
   getUniqueLocations,
   getUniqueStates,
-  getUniqueCountries
+  getUniqueCountries,
+  getStudentOptions
 };

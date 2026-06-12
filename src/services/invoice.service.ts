@@ -306,19 +306,20 @@ const generateAutoInvoice = async (
   const dueDate = new Date();
   dueDate.setDate(invoiceDate.getDate() + 7);
 
-  const name = `${student.personalInfo.givenName} ${student.personalInfo.surname}`;
-  const addr = student.address.primaryPostalAddress;
+  const name = `${student.personalInfo.givenName} ${student.personalInfo.surname}`.trim();
+  const snap = studentSnapshot;
+  const addr = student.address?.primaryPostalAddress;
 
   const baseData = {
     inv_date: invoiceDate.toISOString().split("T")[0],
     due_date: dueDate.toISOString().split("T")[0],
     inv_no: invoiceId,
     p_order: "Auto Order",
-    name,
-    address: addr.street,
-    town: addr.city,
-    state: addr.state,
-    postcode: addr.postCode,
+    name: snap?.name || name,
+    address: snap?.address?.street || addr?.street || "N/A",
+    town: snap?.address?.city || addr?.city || "N/A",
+    state: snap?.address?.state || addr?.state || "N/A",
+    postcode: snap?.address?.postcode || addr?.postCode || "N/A",
     ...calculateInvoiceTotals(items)
   };
 
