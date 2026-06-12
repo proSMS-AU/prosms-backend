@@ -49,6 +49,12 @@ export class AvetmissReport {
 
   @Prop({ required: true, default: false })
   isImported: boolean;
+
+  @Prop({ required: true, default: "NCVER", enum: ["NCVER", "STA"] })
+  destination: string;
+
+  @Prop()
+  destinationState?: string;
 }
 export const AvetmissReportModel = getModelForClass(AvetmissReport);
 

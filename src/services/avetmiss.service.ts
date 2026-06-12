@@ -1202,7 +1202,8 @@ const generateNAT00120 = async (
   organizationId: string,
   rtoId: string,
   startDate: Date,
-  endDate: Date
+  endDate: Date,
+  fundingCodes?: string[]
 ): Promise<{
   content: string;
   studentIds: Set<string>;
@@ -1324,7 +1325,6 @@ const generateNAT00120 = async (
     const vetInSchools = cls.classDetails?.vetInSchool ? "Y" : "N";
 
     for (const enrollment of cls.enrollments ?? []) {
-      studentIds.add(enrollment.studentInfo.id);
       if ((qual as any)?._id) qualificationIds.add((qual as any)._id.toString());
 
       for (const unit of enrollment.unitsOfCompetency ?? []) {
@@ -1428,6 +1428,11 @@ const generateNAT00120 = async (
         // R-06: Student-level fundingSourceNational overrides class default
         const studentFundRaw = (student as any)?.fundingSourceNational;
         const effectiveFundNational = studentFundRaw ? getFundingSourceNationalCode(studentFundRaw) : fundNational;
+
+        // Phase 7: filter by destination funding codes (NCVER vs STA)
+        if (fundingCodes && fundingCodes.length > 0 && !fundingCodes.includes(effectiveFundNational)) continue;
+
+        studentIds.add(enrollment.studentInfo.id);
 
         // Record effective funding per student for the NAT00080/00085 overseas rule.
         // International codes (31/32) win over domestic if a student spans multiple classes,
@@ -1597,6 +1602,10 @@ const generateNAT00130 = async (
 
 // ─── MAIN REPORT GENERATOR ─────────────────────────────────────────────────────
 
+// Funding source codes per destination (NCVER direct reporting / STA state-funded)
+const NCVER_FUNDING_CODES = ["20", "21", "31", "32"];
+const STA_FUNDING_CODES = ["11", "13", "15", "80"];
+
 const generateAvetmissReport = async (
   organizationId: string,
   userId: string,
@@ -1605,9 +1614,34 @@ const generateAvetmissReport = async (
   const org = await OrganizationModel.findById(organizationId);
   if (!org) throw new AppError(httpStatus.NOT_FOUND, "NOT_FOUND", "Organization not found");
 
+  const destination = data.destination ?? "NCVER";
+  const destinationState = data.destinationState;
+
+  if (destination === "STA" && !destinationState) {
+    throw new AppError(httpStatus.BAD_REQUEST, "BAD_REQUEST", "destinationState is required for STA export");
+  }
+
   const startDate = new Date(data.startDate);
   const endDate = new Date(data.endDate);
   endDate.setHours(23, 59, 59, 999);
+
+  // Duplicate check: warn if a report for the same destination/state/overlapping period exists
+  if (!data.force) {
+    const existing = await AvetmissReportModel.findOne({
+      organizationId,
+      destination,
+      ...(destination === "STA" ? { destinationState } : {}),
+      startDate: { $lte: endDate },
+      endDate: { $gte: startDate }
+    });
+    if (existing) {
+      throw new AppError(
+        httpStatus.CONFLICT,
+        "DUPLICATE_REPORT",
+        `A ${destination}${destinationState ? ` (${destinationState})` : ""} report already exists for an overlapping period (${existing.periodLabel}). Pass force=true to overwrite.`
+      );
+    }
+  }
 
   const rtoId = org.rtoId;
 
@@ -1621,10 +1655,12 @@ const generateAvetmissReport = async (
   const from = startDate.toISOString().slice(0, 10);
   const to = endDate.toISOString().slice(0, 10);
 
-  const fileName = `avetmiss_${from}_to_${to}_${reportId}.zip`;
-  const title = `avetmiss_${from}_to_${to}`;
+  const destLabel = destination === "STA" ? `${destination}-${destinationState}` : destination;
+  const fileName = `avetmiss_${destLabel}_${from}_to_${to}_${reportId}.zip`;
+  const title = `avetmiss_${destLabel}_${from}_to_${to}`;
 
-  const nat120Result = await generateNAT00120(organizationId, rtoId, startDate, endDate);
+  const fundingCodes = destination === "NCVER" ? NCVER_FUNDING_CODES : STA_FUNDING_CODES;
+  const nat120Result = await generateNAT00120(organizationId, rtoId, startDate, endDate, fundingCodes);
 
   const nat10 = await generateNAT00010(organizationId);
 
@@ -1689,6 +1725,8 @@ const generateAvetmissReport = async (
       organizationId,
       reportId,
       reportType: "AVETMISS",
+      destination,
+      destinationState: destinationState ?? undefined,
       startDate,
       endDate,
       periodLabel: data.periodLabel ?? `${from} to ${to}`,

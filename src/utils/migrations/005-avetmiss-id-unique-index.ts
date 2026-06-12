@@ -31,7 +31,7 @@ const run = async () => {
   // Check for existing duplicates before creating the unique index.
   const duplicates = await col
     .aggregate([
-      { $match: { avetmissId: { $exists: true, $ne: null, $ne: "" } } },
+      { $match: { avetmissId: { $exists: true, $nin: [null, ""] } } },
       { $group: { _id: { organizationId: "$organizationId", avetmissId: "$avetmissId" }, count: { $sum: 1 }, ids: { $push: "$_id" } } },
       { $match: { count: { $gt: 1 } } }
     ])

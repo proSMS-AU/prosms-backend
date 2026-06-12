@@ -232,6 +232,7 @@ export const StudentSchema = object({
 
 // UPDATE SCHEMA - everything optional (deep partial manually)
 export const UpdateStudentSchema = object({
+  avetmissId: string().optional(),
   personalInfo: object({
     title: string().optional(),
     givenName: string().optional(),
