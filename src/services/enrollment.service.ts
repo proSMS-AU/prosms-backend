@@ -722,16 +722,25 @@ const getStudentEnrollments = async (studentId: string, organizationId: string) 
     "enrollments.studentInfo.id": studentId
   })
     .populate("qualificationId")
+    .populate("classDetails.defaultTrainer", "personalInfo.givenName personalInfo.surname")
     .lean();
 
-  return classes.map((cls: any) => ({
-    classId: cls._id,
-    classTitle: cls.classDetails?.classTitle,
-    startDate: cls.classDetails?.startDate,
-    endDate: cls.classDetails?.endDate,
-    qualification: cls.qualificationId,
-    enrollment: cls.enrollments?.find((e: any) => e.studentInfo?.id === studentId)
-  }));
+  return classes.map((cls: any) => {
+    const trainer = cls.classDetails?.defaultTrainer;
+    const trainerName = trainer?.personalInfo
+      ? `${trainer.personalInfo.givenName ?? ""} ${trainer.personalInfo.surname ?? ""}`.trim() || undefined
+      : undefined;
+
+    return {
+      classId: cls._id,
+      classTitle: cls.classDetails?.classTitle,
+      startDate: cls.classDetails?.startDate,
+      endDate: cls.classDetails?.endDate,
+      trainerName,
+      qualification: cls.qualificationId,
+      enrollment: cls.enrollments?.find((e: any) => String(e.studentInfo?.id) === String(studentId))
+    };
+  });
 };
 
 // E-03 — Bulk enrol multiple students into one class
