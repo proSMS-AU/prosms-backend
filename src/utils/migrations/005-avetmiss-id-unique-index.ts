@@ -32,13 +32,21 @@ const run = async () => {
   const duplicates = await col
     .aggregate([
       { $match: { avetmissId: { $exists: true, $nin: [null, ""] } } },
-      { $group: { _id: { organizationId: "$organizationId", avetmissId: "$avetmissId" }, count: { $sum: 1 }, ids: { $push: "$_id" } } },
+      {
+        $group: {
+          _id: { organizationId: "$organizationId", avetmissId: "$avetmissId" },
+          count: { $sum: 1 },
+          ids: { $push: "$_id" }
+        }
+      },
       { $match: { count: { $gt: 1 } } }
     ])
     .toArray();
 
   if (duplicates.length > 0) {
-    logger.warn(`[Migration 005] Found ${duplicates.length} duplicate avetmissId group(s) — resolve before creating the index:`);
+    logger.warn(
+      `[Migration 005] Found ${duplicates.length} duplicate avetmissId group(s) — resolve before creating the index:`
+    );
     for (const dup of duplicates) {
       logger.warn(`  org=${dup._id.organizationId} avetmissId="${dup._id.avetmissId}" docs=${JSON.stringify(dup.ids)}`);
     }

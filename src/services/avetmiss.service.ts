@@ -1685,8 +1685,12 @@ const generateAvetmissReport = async (
   // For Nil Return: only include NAT00010 + NAT00020; all enrolment files are empty.
   const nat30 = isNilReturn ? "" : await generateNAT00030(Array.from(nat120Result.qualificationIds));
   const nat60 = isNilReturn ? "" : await generateNAT00060(Array.from(nat120Result.unitCodes), organizationId);
-  const nat80 = isNilReturn ? "" : await generateNAT00080(Array.from(nat120Result.studentIds), endDate, nat120Result.studentFundingMap);
-  const nat85 = isNilReturn ? "" : await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
+  const nat80 = isNilReturn
+    ? ""
+    : await generateNAT00080(Array.from(nat120Result.studentIds), endDate, nat120Result.studentFundingMap);
+  const nat85 = isNilReturn
+    ? ""
+    : await generateNAT00085(Array.from(nat120Result.studentIds), nat120Result.studentFundingMap);
   const nat90 = isNilReturn ? "" : await generateNAT00090(Array.from(nat120Result.studentIds));
   const nat100 = isNilReturn ? "" : await generateNAT00100(Array.from(nat120Result.studentIds));
   const nat120Content = isNilReturn ? "" : nat120Result.content;

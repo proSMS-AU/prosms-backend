@@ -42,7 +42,9 @@ const run = async () => {
 
   const fakeEmailCount = await StudentModel.countDocuments(emailFilter);
   const placeholderPhoneCount = await StudentModel.countDocuments(phoneFilter);
-  logger.info(`[Migration 003] Found placeholder emails=${fakeEmailCount}, placeholder phones=${placeholderPhoneCount}`);
+  logger.info(
+    `[Migration 003] Found placeholder emails=${fakeEmailCount}, placeholder phones=${placeholderPhoneCount}`
+  );
 
   // 1. Drop the old non-sparse unique email index (blocks unsetting many emails).
   const indexes = (await StudentModel.collection.indexes()) as any[];

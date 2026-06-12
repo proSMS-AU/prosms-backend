@@ -472,10 +472,7 @@ const upsertStudents = async (
                 };
               } else if (isPlaceholderPhone && storedPhone) {
                 // Had a placeholder number and file has nothing real — unset the placeholder.
-                await StudentModel.updateOne(
-                  { _id: existing._id },
-                  { $unset: { "contactDetails.personalPhone": "" } }
-                );
+                await StudentModel.updateOne({ _id: existing._id }, { $unset: { "contactDetails.personalPhone": "" } });
               }
             }
 

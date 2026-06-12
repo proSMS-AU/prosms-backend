@@ -49,8 +49,7 @@ const requireUser = async (req: Request, res: Response, next: NextFunction) => {
 
   // Allow the one endpoint that the disabled screen needs — it explicitly works
   // for deleted-org sessions to show basic org info.
-  const isDisabledInfoRoute =
-    req.method === "GET" && req.path === "/disabled-info";
+  const isDisabledInfoRoute = req.method === "GET" && req.path === "/disabled-info";
 
   if (user.organizationId && !isDisabledInfoRoute) {
     const org = await OrganizationModel.findById(user.organizationId).select("isDeleted").lean();

@@ -63,7 +63,11 @@ const addNewStudent = async (data: AddStudentT, organizationId: string) => {
         throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "Student ID conflict, please try again");
       }
       if (err?.keyPattern?.avetmissId) {
-        throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "A student with this AVETMISS ID already exists in your organisation");
+        throw new AppError(
+          httpStatus.CONFLICT,
+          CONFLICT_ERROR.code,
+          "A student with this AVETMISS ID already exists in your organisation"
+        );
       }
     }
     throw err;
@@ -410,7 +414,11 @@ const updateStudent = async (studentId: string, data: UpdateStudentT) => {
         _id: { $ne: studentId }
       }).lean();
       if (clash) {
-        throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "A student with this AVETMISS ID already exists in your organisation");
+        throw new AppError(
+          httpStatus.CONFLICT,
+          CONFLICT_ERROR.code,
+          "A student with this AVETMISS ID already exists in your organisation"
+        );
       }
     }
   }

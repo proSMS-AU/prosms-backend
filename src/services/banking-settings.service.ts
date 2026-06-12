@@ -11,11 +11,7 @@ type BankingDetailsInput = {
 const getBankingSettings = async () => {
   // findOneAndUpdate with upsert=true ensures we always return a document
   // even if one has never been saved yet.
-  const doc = await BankingSettingsModel.findOneAndUpdate(
-    {},
-    { $setOnInsert: {} },
-    { upsert: true, new: true }
-  ).lean();
+  const doc = await BankingSettingsModel.findOneAndUpdate({}, { $setOnInsert: {} }, { upsert: true, new: true }).lean();
   return doc;
 };
 
@@ -27,11 +23,7 @@ const upsertBankingSettings = async (data: BankingDetailsInput) => {
   if (data.accountName !== undefined) update.accountName = data.accountName;
   if (data.signature !== undefined) update.signature = data.signature;
 
-  const doc = await BankingSettingsModel.findOneAndUpdate(
-    {},
-    { $set: update },
-    { upsert: true, new: true }
-  ).lean();
+  const doc = await BankingSettingsModel.findOneAndUpdate({}, { $set: update }, { upsert: true, new: true }).lean();
   return doc;
 };
 

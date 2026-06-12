@@ -82,10 +82,7 @@ const softDeleteOrganization = async (id: string) => {
   await organization.save();
 
   // Lock out every user belonging to this org — no login, no API access.
-  await AuthModel.updateMany(
-    { organizationId: String(organization._id) },
-    { $set: { isDeleted: true } }
-  );
+  await AuthModel.updateMany({ organizationId: String(organization._id) }, { $set: { isDeleted: true } });
 
   return { _id: organization._id };
 };
@@ -93,9 +90,7 @@ const softDeleteOrganization = async (id: string) => {
 // Return just enough info to render the /account-disabled screen.
 // Throws 403 ORG_DISABLED if the org is still active (so the page can redirect active users away).
 const getDisabledOrgInfo = async (organizationId: string) => {
-  const org = await OrganizationModel.findById(organizationId).select(
-    "name originalEmail email logoUrl isDeleted"
-  );
+  const org = await OrganizationModel.findById(organizationId).select("name originalEmail email logoUrl isDeleted");
   if (!org) {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
   }
