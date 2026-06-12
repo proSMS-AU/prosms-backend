@@ -12,6 +12,10 @@ router.get("/", asyncWrapper(organizationControllers.getAllOrganizationsHandler)
 
 router.get("/me", asyncWrapper(organizationControllers.getOrganizationHandler));
 
+// Whitelisted — accessible even for deleted-org sessions (requireUser lets this
+// path through the ORG_DISABLED gate so the disabled screen can fetch org info).
+router.get("/disabled-info", asyncWrapper(organizationControllers.getDisabledOrgInfoHandler));
+
 router.get("/stats", asyncWrapper(organizationControllers.getOrganizationStatsHandler));
 
 router.get("/:id", asyncWrapper(organizationControllers.getOrganizationByIdHandler));

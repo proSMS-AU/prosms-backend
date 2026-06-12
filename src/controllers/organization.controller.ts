@@ -64,11 +64,22 @@ const deleteOrganizationHandler = async (req: Request, res: Response) => {
   });
 };
 
+// Whitelisted for deleted-org tokens — used by the /account-disabled screen.
+const getDisabledOrgInfoHandler = async (req: Request, res: Response) => {
+  const info = await OrganizationServices.getDisabledOrgInfo(req.user?.organizationId as string);
+  SendSuccessResponse.success({
+    res,
+    message: "Organization info retrieved",
+    data: info
+  });
+};
+
 export const organizationControllers = {
   getAllOrganizationsHandler,
   getOrganizationHandler,
   getOrganizationByIdHandler,
   getOrganizationStatsHandler,
   updateOrganizationHandler,
-  deleteOrganizationHandler
+  deleteOrganizationHandler,
+  getDisabledOrgInfoHandler
 };

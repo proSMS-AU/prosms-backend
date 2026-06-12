@@ -1,4 +1,5 @@
 import { DATA_NOT_FOUND, httpStatus } from "../constants";
+import { AuthModel } from "../model/auth.model";
 import { OrganizationModel } from "../model/organization.model";
 import { AppError } from "../utils/appError";
 import { QueryBuilder } from "../utils/queryBuilder";
@@ -63,12 +64,46 @@ const softDeleteOrganization = async (id: string) => {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
   }
 
+  const ts = Date.now();
+
+  // Tombstone unique-index fields so the same RTO can re-register.
+  // Originals are kept in dedicated fields for display/audit/restore.
+  organization.originalEmail = organization.email;
+  organization.originalRtoId = organization.rtoId;
+  organization.originalABN = organization.ABN;
+
+  organization.email = `${organization.email}.deleted.${ts}`;
+  organization.rtoId = `${organization.rtoId}.deleted.${ts}`;
+  organization.ABN = `${organization.ABN}.deleted.${ts}`;
+
   organization.isDeleted = true;
   organization.deletedAt = new Date();
   organization.status = "inactive";
   await organization.save();
 
+  // Lock out every user belonging to this org — no login, no API access.
+  await AuthModel.updateMany(
+    { organizationId: String(organization._id) },
+    { $set: { isDeleted: true } }
+  );
+
   return { _id: organization._id };
+};
+
+// Return just enough info to render the /account-disabled screen.
+// Does NOT require the org to be active — works for deleted-org tokens.
+const getDisabledOrgInfo = async (organizationId: string) => {
+  const org = await OrganizationModel.findById(organizationId).select(
+    "name originalEmail email logoUrl isDeleted"
+  );
+  if (!org) {
+    throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, "Organization not found");
+  }
+  return {
+    name: org.name,
+    email: org.originalEmail ?? org.email,
+    logoUrl: org.logoUrl
+  };
 };
 
 const updateOrganization = async (id: string, data: Record<string, unknown>) => {
@@ -89,5 +124,6 @@ export const OrganizationServices = {
   getOrganizationById,
   getOrganizationStats,
   updateOrganization,
-  softDeleteOrganization
+  softDeleteOrganization,
+  getDisabledOrgInfo
 };

@@ -13,6 +13,15 @@ const login = async (email: string, password: string) => {
     throw new AppError(httpStatus.NOT_FOUND, DATA_NOT_FOUND.code, DATA_NOT_FOUND.message);
   }
 
+  // Deleted-org users cannot log in.
+  if (user.isDeleted) {
+    throw new AppError(
+      httpStatus.FORBIDDEN,
+      "ORG_DISABLED",
+      "Your organisation account has been disabled. Please contact the authority."
+    );
+  }
+
   // Compare passwords
   const isMatch = await argon2.verify(user?.password || "", password);
 

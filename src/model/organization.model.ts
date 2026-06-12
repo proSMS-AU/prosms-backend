@@ -111,6 +111,17 @@ export class Organization {
 
   @Prop({ type: Date })
   deletedAt?: Date;
+
+  // Tombstone originals — unique-index fields are mangled on delete so the same
+  // RTO can re-register. Originals stored here for display/audit/restore.
+  @Prop({ type: String })
+  originalEmail?: string;
+
+  @Prop({ type: String })
+  originalRtoId?: string;
+
+  @Prop({ type: String })
+  originalABN?: string;
 }
 
 export const OrganizationModel = getModelForClass(Organization);

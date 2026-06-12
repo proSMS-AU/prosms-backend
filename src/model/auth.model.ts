@@ -66,5 +66,9 @@ export class Auth {
     default: () => ({ enabled: false, devices: [], emailOtpEnabled: false })
   })
   twoFactorAuth?: TwoFactorAuth;
+
+  // Set to true when the org is soft-deleted — blocks login and all API access.
+  @Prop({ type: Boolean, default: false })
+  isDeleted?: boolean;
 }
 export const AuthModel = getModelForClass(Auth);
