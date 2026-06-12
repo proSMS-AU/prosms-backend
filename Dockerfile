@@ -24,8 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libreoffice-common \
     fonts-dejavu-core \
     fonts-noto-core \
+    fonts-crosextra-carlito \
+    fonts-crosextra-caladea \
+    fonts-liberation \
     wget \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && fc-cache -f
 
 COPY package.json yarn.lock ./
 

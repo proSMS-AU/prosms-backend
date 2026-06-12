@@ -90,12 +90,18 @@ const prepareBaseCertificateData = async (
     COURSE_NAME: ""
   };
 
-  const issuedDate = new Date().toLocaleDateString("en-AU", {
-    timeZone: "Australia/Sydney",
-    year: "numeric",
-    month: "long",
-    day: "numeric"
-  });
+  const formatCertDate = (value?: string): string => {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return value as string;
+    return date.toLocaleDateString("en-AU", {
+      timeZone: "Australia/Sydney",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  };
+
+  const issuedDate = formatCertDate(givenCertIssueDate);
 
   const streamValue = qualification?.stream ? `\n${qualification.stream}` : "";
 
@@ -108,10 +114,26 @@ const prepareBaseCertificateData = async (
     COURSE_NAME: parsedTitle.COURSE_NAME,
     STREAM: streamValue,
     CERT_NO: certificateShortId,
-    _dtCompleted: givenCertIssueDate ?? issuedDate,
-    MAX_DATE: givenCertIssueDate ?? issuedDate,
+    _dtCompleted: issuedDate,
+    MAX_DATE: issuedDate,
     QR_CODE: ""
   };
+};
+
+// Remove table rows whose cells rendered to no text (unused U/UNAME/URES merge slots).
+// Assumes non-nested tables; rows holding images/nested tables are kept as-is.
+const stripEmptyTableRows = (documentXml: string): string => {
+  return documentXml.replace(/<w:tr(?: [^>]*)?>[\s\S]*?<\/w:tr>/g, (row) => {
+    if (row.includes("<w:tbl") || row.includes("<w:drawing") || row.includes("<w:pict")) {
+      return row;
+    }
+    const texts = row.match(/<w:t(?: [^>]*)?>[\s\S]*?<\/w:t>/g) || [];
+    const content = texts
+      .map((t) => t.replace(/<[^>]+>/g, ""))
+      .join("")
+      .trim();
+    return content ? row : "";
+  });
 };
 
 const fillTemplate = async (templateBuffer: Buffer, data: any): Promise<Buffer> => {
@@ -165,7 +187,13 @@ const fillTemplate = async (templateBuffer: Buffer, data: any): Promise<Buffer> 
 
     doc.render(data);
 
-    const buffer = doc.getZip().generate({
+    const renderedZip = doc.getZip();
+    const documentXml = renderedZip.file("word/document.xml")?.asText();
+    if (documentXml) {
+      renderedZip.file("word/document.xml", stripEmptyTableRows(documentXml));
+    }
+
+    const buffer = renderedZip.generate({
       type: "nodebuffer",
       compression: "DEFLATE"
     });
