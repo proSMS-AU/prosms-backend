@@ -58,8 +58,13 @@ const addNewStudent = async (data: AddStudentT, organizationId: string) => {
     const newStudent = await StudentModel.create({ ...data, organizationId, studentId, avetmissId });
     return newStudent;
   } catch (err: any) {
-    if (err?.code === 11000 && err?.keyPattern?.studentId) {
-      throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "Student ID conflict, please try again");
+    if (err?.code === 11000) {
+      if (err?.keyPattern?.studentId) {
+        throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "Student ID conflict, please try again");
+      }
+      if (err?.keyPattern?.avetmissId) {
+        throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "A student with this AVETMISS ID already exists in your organisation");
+      }
     }
     throw err;
   }
@@ -393,6 +398,20 @@ const updateStudent = async (studentId: string, data: UpdateStudentT) => {
 
     if (existingStudent) {
       throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "Another student already exists with this email");
+    }
+  }
+
+  if (data.avetmissId) {
+    const current = await StudentModel.findById(studentId).select("organizationId").lean();
+    if (current) {
+      const clash = await StudentModel.findOne({
+        organizationId: current.organizationId,
+        avetmissId: data.avetmissId,
+        _id: { $ne: studentId }
+      }).lean();
+      if (clash) {
+        throw new AppError(httpStatus.CONFLICT, CONFLICT_ERROR.code, "A student with this AVETMISS ID already exists in your organisation");
+      }
     }
   }
 

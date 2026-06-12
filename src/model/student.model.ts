@@ -393,6 +393,7 @@ class AdditionalInformation {
 }
 
 @Index({ organizationId: 1, studentId: 1 }, { unique: true })
+@Index({ organizationId: 1, avetmissId: 1 }, { unique: true, sparse: true })
 @ModelOptions({
   schemaOptions: {
     collection: "students",
