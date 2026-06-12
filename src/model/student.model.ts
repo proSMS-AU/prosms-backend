@@ -116,7 +116,9 @@ class EmploymentDetails {
 }
 
 class ContactDetails {
-  @Prop({ required: true, type: () => PhoneNumber, _id: false })
+  // Optional: NAT-imported students may have no phone, and we never store a
+  // placeholder. Manual creation still requires it via the form/zod schema.
+  @Prop({ type: () => PhoneNumber, _id: false })
   personalPhone: PhoneNumber;
 
   @Prop({ type: () => PhoneNumber, _id: false })
@@ -125,9 +127,12 @@ class ContactDetails {
   @Prop({ type: () => PhoneNumber, _id: false })
   homePhone?: PhoneNumber;
 
+  // Optional + sparse-unique: NAT-imported students may have no email (we no
+  // longer fabricate one). Sparse keeps the uniqueness guarantee for real
+  // emails while allowing many students with no email at all.
   @Prop({
-    required: true,
     unique: true,
+    sparse: true,
     trim: true,
     lowercase: true
   })

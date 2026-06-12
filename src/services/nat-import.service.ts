@@ -335,6 +335,9 @@ interface Nat85Record {
   suburb: string;
   postcode: string;
   stateCode: string;
+  homePhone: string;
+  workPhone: string;
+  mobilePhone: string;
   email: string;
 }
 
@@ -386,6 +389,11 @@ const parseNAT00085 = (content: string): Map<string, Nat85Record> => {
         suburb: read(l, 282, 50),
         postcode: read(l, 332, 4),
         stateCode: read(l, 336, 2),
+        // NAT00085 telephone fields (were previously skipped — caused phones to
+        // be lost and replaced with a placeholder).
+        homePhone: read(l, 338, 20),
+        workPhone: read(l, 358, 20),
+        mobilePhone: read(l, 378, 20),
         email: read(l, 398, 80)
       };
       if (rec.avetmissId) map.set(rec.avetmissId, rec);
@@ -455,7 +463,17 @@ const upsertStudents = async (
       const postcode = (n85?.postcode || r.postcode || "").trim() || "0000";
       const stateRaw = (n85?.stateCode || r.stateCode || "").trim();
       const state = (STATE_CODE_REVERSE[stateRaw] ?? stateRaw) || "Not Stated";
-      const email = n85?.email?.trim() || `imported-${r.avetmissId}@prosms.local`;
+
+      // Only carry real contact data from the file. If the NAT record has no
+      // email/phone, leave them empty — never invent a placeholder.
+      const emailFromNat = n85?.email?.trim();
+      const rawPhone = (n85?.mobilePhone || n85?.homePhone || n85?.workPhone || "").trim();
+      const phoneDigits = rawPhone.replace(/\D/g, "");
+      const contactDetails: Record<string, unknown> = {};
+      if (emailFromNat) contactDetails.email = emailFromNat;
+      if (phoneDigits) {
+        contactDetails.personalPhone = { countryCode: "+61", number: phoneDigits, formattedNumber: rawPhone };
+      }
 
       const studentId = await generateStudentId(organizationId);
 
@@ -474,10 +492,7 @@ const upsertStudents = async (
           gender: GENDER_MAP[r.gender.toUpperCase()] ?? "notStated",
           dateOfBirth: parseDob(r.dob) || "1900-01-01"
         },
-        contactDetails: {
-          email,
-          personalPhone: { countryCode: "+61", number: "0000000000" }
-        },
+        contactDetails,
         address: {
           arePostalStreetAddressSame: true,
           primaryPostalAddress: {
