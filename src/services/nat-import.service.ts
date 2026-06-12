@@ -426,9 +426,11 @@ const upsertStudents = async (
 
   for (const r of nat80Records) {
     try {
-      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId }).select("_id isDeleted");
+      const existing = await StudentModel.findOne({ organizationId, avetmissId: r.avetmissId }).select(
+        "_id isDeleted contactDetails"
+      );
       if (existing) {
-        // Re-import of a previously soft-deleted student → restore it so it reappears (issue #2)
+        // Re-import of a previously soft-deleted student → restore it so it reappears.
         if ((existing as any).isDeleted) {
           await StudentModel.updateOne(
             { _id: existing._id },
@@ -436,6 +438,51 @@ const upsertStudents = async (
           );
           result.created += 1;
         } else {
+          // Student already exists — check if we should backfill contact data.
+          // Only overwrite if the stored value is absent or a known placeholder (never
+          // overwrite real, manually-entered data).
+          const n85ForExisting = nat85Map.get(r.avetmissId);
+          if (n85ForExisting) {
+            const storedEmail: string | undefined = (existing as any).contactDetails?.email;
+            const storedPhone: string | undefined = (existing as any).contactDetails?.personalPhone?.number;
+
+            const isPlaceholderEmail = !storedEmail || /^imported-.*@prosms\.local$/i.test(storedEmail);
+            const isPlaceholderPhone = !storedPhone || storedPhone === "0000000000";
+
+            const backfill: Record<string, unknown> = {};
+
+            if (isPlaceholderEmail) {
+              const realEmail = n85ForExisting.email?.trim();
+              if (realEmail) backfill["contactDetails.email"] = realEmail;
+            }
+
+            if (isPlaceholderPhone) {
+              const rawPhone = (
+                n85ForExisting.mobilePhone ||
+                n85ForExisting.homePhone ||
+                n85ForExisting.workPhone ||
+                ""
+              ).trim();
+              const phoneDigits = rawPhone.replace(/\D/g, "");
+              if (phoneDigits) {
+                backfill["contactDetails.personalPhone"] = {
+                  countryCode: "+61",
+                  number: phoneDigits,
+                  formattedNumber: rawPhone
+                };
+              } else if (isPlaceholderPhone && storedPhone) {
+                // Had a placeholder number and file has nothing real — unset the placeholder.
+                await StudentModel.updateOne(
+                  { _id: existing._id },
+                  { $unset: { "contactDetails.personalPhone": "" } }
+                );
+              }
+            }
+
+            if (Object.keys(backfill).length > 0) {
+              await StudentModel.updateOne({ _id: existing._id }, { $set: backfill });
+            }
+          }
           result.skipped += 1;
         }
         continue;

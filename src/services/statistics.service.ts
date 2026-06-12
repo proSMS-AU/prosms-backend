@@ -45,15 +45,14 @@ interface CompletionRatePie {
 }
 
 const dashboardStatistics = async (organizationId: string): Promise<DashboardStats> => {
-  // Validate organization ID
   if (!organizationId || !Types.ObjectId.isValid(organizationId)) {
     throw new Error("Invalid organization ID");
   }
 
+  const orgId = new Types.ObjectId(organizationId);
   const now = new Date();
 
   try {
-    // Run all queries in parallel for better performance
     const [
       totalStudents,
       currentlyEnrolledResult,
@@ -65,46 +64,37 @@ const dashboardStatistics = async (organizationId: string): Promise<DashboardSta
       overallCompletionRateResult
     ] = await Promise.all([
       // 1. Total Students
-      StudentModel.countDocuments({ organizationId, isDeleted: { $ne: true } }),
+      StudentModel.countDocuments({ organizationId: orgId, isDeleted: { $ne: true } }),
 
-      // 2. Currently Enrolled Students (unique students with active enrollments)
+      // 2. Currently Enrolled — unique students in classes that haven't ended yet and have no
+      //    completion date. Null matches both explicit null and missing field.
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId, "classDetails.endDate": { $gte: now } } },
         { $unwind: "$enrollments" },
-        {
-          $match: {
-            "enrollments.completionDate": null,
-            "classDetails.endDate": { $gte: now }
-          }
-        },
-        {
-          $group: {
-            _id: "$enrollments.studentInfo.id"
-          }
-        },
+        { $match: { "enrollments.completionDate": null } },
+        { $group: { _id: "$enrollments.studentInfo.id" } },
         { $count: "count" }
       ]),
 
-      // 3. Total Certificates (enrollments with certificateIssuedDate not null)
+      // 3. Total Certificates issued (certificateIssuedDate is a real Date)
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId } },
         { $unwind: "$enrollments" },
-        {
-          $match: {
-            "enrollments.certificateIssuedDate": { $ne: null }
-          }
-        },
+        { $match: { "enrollments.certificateIssuedDate": { $ne: null, $exists: true } } },
         { $count: "count" }
       ]),
 
-      // 4. Pending Certificates (completionDate not null, certificateIssuedDate null)
+      // 4. Pending Certificates — has a completionDate but certificate not yet issued
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: orgId } },
         { $unwind: "$enrollments" },
         {
           $match: {
-            "enrollments.completionDate": { $ne: null },
-            "enrollments.certificateIssuedDate": null
+            "enrollments.completionDate": { $ne: null, $exists: true },
+            $or: [
+              { "enrollments.certificateIssuedDate": null },
+              { "enrollments.certificateIssuedDate": { $exists: false } }
+            ]
           }
         },
         { $count: "count" }
@@ -112,7 +102,7 @@ const dashboardStatistics = async (organizationId: string): Promise<DashboardSta
 
       // 5. Active Classes (startDate <= now <= endDate)
       ClassModel.countDocuments({
-        organizationId,
+        organizationId: orgId,
         "classDetails.startDate": { $lte: now },
         "classDetails.endDate": { $gte: now }
       }),
@@ -159,7 +149,6 @@ const getMonthlyEnrollmentTrend = async (organizationId: string): Promise<Monthl
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth() + 1; // 1-12
 
-  // Calculate start date (12 months ago from current month)
   let startYear = currentYear;
   let startMonth = currentMonth - 11;
   if (startMonth <= 0) {
@@ -171,7 +160,7 @@ const getMonthlyEnrollmentTrend = async (organizationId: string): Promise<Monthl
   const endDate = new Date(currentYear, currentMonth, 0, 23, 59, 59, 999);
 
   const result = await ClassModel.aggregate([
-    { $match: { organizationId } },
+    { $match: { organizationId: new Types.ObjectId(organizationId) } },
     { $unwind: "$enrollments" },
     {
       $match: {
@@ -226,7 +215,7 @@ const getMonthlyEnrollmentTrend = async (organizationId: string): Promise<Monthl
 // Get top 12 classes by enrollment count with completion breakdown
 const getClassPopularityAndCompletion = async (organizationId: string): Promise<ClassPopularity[]> => {
   const result = await ClassModel.aggregate([
-    { $match: { organizationId } },
+    { $match: { organizationId: new Types.ObjectId(organizationId) } },
     {
       $addFields: {
         enrollmentCount: { $size: { $ifNull: ["$enrollments", []] } }
@@ -296,7 +285,7 @@ const getClassPopularityAndCompletion = async (organizationId: string): Promise<
 // Only counts: C (Completed), CA (In Progress), CNA (Dropped)
 const getOverallCompletionRate = async (organizationId: string): Promise<CompletionRatePie> => {
   const result = await ClassModel.aggregate([
-    { $match: { organizationId } },
+    { $match: { organizationId: new Types.ObjectId(organizationId) } },
     { $unwind: "$enrollments" },
     { $unwind: "$enrollments.unitsOfCompetency" },
     {
@@ -393,7 +382,7 @@ const studentStatistics = async (organizationId: string): Promise<StudentStats> 
 
       // 3. Total enrollments in last month (not unique students, count all enrollments)
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: new Types.ObjectId(organizationId) } },
         { $unwind: "$enrollments" },
         {
           $match: {
@@ -456,7 +445,7 @@ const qualificationStatistics = async (organizationId: string): Promise<Qualific
 
       // 2. Active Qualifications (qualifications used in classes that haven't ended yet)
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: new Types.ObjectId(organizationId) } },
         {
           $match: {
             "classDetails.endDate": { $gte: now }
@@ -510,11 +499,15 @@ const classStatistics = async (organizationId: string): Promise<ClassStats> => {
       ClassModel.countDocuments({ organizationId }),
 
       // 2. Total Enrollments (all time, across all classes)
-      ClassModel.aggregate([{ $match: { organizationId } }, { $unwind: "$enrollments" }, { $count: "count" }]),
+      ClassModel.aggregate([
+        { $match: { organizationId: new Types.ObjectId(organizationId) } },
+        { $unwind: "$enrollments" },
+        { $count: "count" }
+      ]),
 
       // 3. Active Classes (startDate <= now <= endDate)
       ClassModel.countDocuments({
-        organizationId,
+        organizationId: new Types.ObjectId(organizationId),
         "classDetails.startDate": { $lte: now },
         "classDetails.endDate": { $gte: now }
       })
@@ -556,7 +549,7 @@ const trainerStatistics = async (organizationId: string): Promise<TrainerStats> 
 
       // 2. Active Trainers (assigned to classes that haven't ended yet)
       ClassModel.aggregate([
-        { $match: { organizationId } },
+        { $match: { organizationId: new Types.ObjectId(organizationId) } },
         {
           $match: {
             "classDetails.endDate": { $gte: now }
