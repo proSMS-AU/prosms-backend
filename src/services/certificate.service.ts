@@ -136,6 +136,20 @@ const stripEmptyTableRows = (documentXml: string): string => {
   });
 };
 
+// Remove trailing blank paragraphs (paragraphs with no runs) just before <w:sectPr> or </w:body>.
+// LibreOffice creates an extra blank page when a trailing empty paragraph is present.
+const stripTrailingBlankParagraphs = (documentXml: string): string => {
+  const emptyParaBefore =
+    /<w:p(?:\s[^>]*)?>(?:<w:pPr(?:\s[^>]*)?>[\s\S]*?<\/w:pPr>)?\s*<\/w:p>\s*(<w:sectPr|<\/w:body>)/;
+  let result = documentXml;
+  let prev = "";
+  while (prev !== result) {
+    prev = result;
+    result = result.replace(emptyParaBefore, "$1");
+  }
+  return result;
+};
+
 const fillTemplate = async (templateBuffer: Buffer, data: any): Promise<Buffer> => {
   try {
     const zip = new PizZip(templateBuffer);
@@ -190,7 +204,9 @@ const fillTemplate = async (templateBuffer: Buffer, data: any): Promise<Buffer> 
     const renderedZip = doc.getZip();
     const documentXml = renderedZip.file("word/document.xml")?.asText();
     if (documentXml) {
-      renderedZip.file("word/document.xml", stripEmptyTableRows(documentXml));
+      let processedXml = stripEmptyTableRows(documentXml);
+      processedXml = stripTrailingBlankParagraphs(processedXml);
+      renderedZip.file("word/document.xml", processedXml);
     }
 
     const buffer = renderedZip.generate({
@@ -262,6 +278,22 @@ const convertToPdf = async (docxBuffer: Buffer, qrCodePath: string): Promise<Buf
     } catch (pdfLibError: any) {
       logger.warn("Could not add QR code with pdf-lib:", pdfLibError.message);
       logger.info("Using original PDF from LibreOffice conversion");
+    }
+
+    // Each template render is designed for exactly one page. Trim any blank
+    // trailing pages that LibreOffice may add (e.g. from the empty paragraph
+    // that Word requires before <w:sectPr>).
+    try {
+      const trimDoc = await PDFDocument.load(pdfBuffer);
+      if (trimDoc.getPageCount() > 1) {
+        logger.warn(`LibreOffice produced ${trimDoc.getPageCount()} pages from single-page template; trimming extras`);
+        for (let i = trimDoc.getPageCount() - 1; i > 0; i--) {
+          trimDoc.removePage(i);
+        }
+        pdfBuffer = Buffer.from(await trimDoc.save());
+      }
+    } catch (trimErr: any) {
+      logger.warn("Could not trim trailing PDF pages:", trimErr.message);
     }
 
     // Cleanup
